@@ -1,6 +1,7 @@
 # Asynchron
 
 [![Crates.io](https://img.shields.io/crates/v/asynchron.svg)](https://crates.io/crates/asynchron)
+[![Asynchron documentation](https://docs.rs/asynchron/badge.svg)](https://docs.rs/asynchron)
 [![Rust](https://github.com/Ar37-rs/asynchron/actions/workflows/rust.yml/badge.svg)](https://github.com/Ar37-rs/asynchron/actions/workflows/rust.yml)
 
 Asynchronize blocking operation.
@@ -81,10 +82,10 @@ fn main() {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    let all_approxed_dur = task2_approx_dur - task1_approx_dur;
+    let all_approxed_durs = task2_approx_dur + task1_approx_dur;
     println!(
         "all the tasks are completed {:?} earlier.\n\nOk",
-        all_approxed_dur
+        all_approxed_durs - task2_approx_dur
     )
 }
 ```

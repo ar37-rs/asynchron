@@ -100,10 +100,10 @@ where
     ///         }
     ///         std::thread::sleep(Duration::from_millis(100));
     ///     }
-    ///     let all_approxed_dur = task2_approx_dur - task1_approx_dur;
+    ///     let all_approxed_durs = task2_approx_dur + task1_approx_dur;
     ///     println!(
     ///         "all the tasks are completed {:?} earlier.\n\nOk",
-    ///         all_approxed_dur
+    ///         all_approxed_durs - task2_approx_dur
     ///     )
     /// }
     /// ```
@@ -118,17 +118,6 @@ where
             ready: Arc::new(AtomicBool::new(false)),
         }
     }
-
-    // pub fn rearrange_task<F: Send + Sync + 'static + Fn() -> Futurized<T, E>>(
-    //     &mut self,
-    //     closure: F,
-    // ) {
-    //     *self = Futurize {
-    //         closure: Arc::new(closure),
-    //         cvar: Arc::new((Mutex::new(Futurized::OnProgress), Condvar::new())),
-    //         awaiting: Arc::new(AtomicBool::new(false)),
-    //     };
-    // }
 
     /// Try (it won't block current thread) wake the task and then try get later somewhere.
     pub fn try_wake(&self) {
