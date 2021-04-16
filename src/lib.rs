@@ -101,7 +101,7 @@ where
     ///             }
     ///         }
     ///         std::thread::sleep(Duration::from_millis(100));
-    ///         if !task2.awake() && !task2.awake() {
+    ///         if !task1.awake() && !task2.awake() {
     ///            break;
     ///         }
     ///     }
