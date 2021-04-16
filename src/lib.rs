@@ -39,7 +39,10 @@ where
     ///     let mut task1_approx_dur = Duration::from_millis(400);
     ///     let task1 = Futurize::task(move || -> Futurized<Vec<u32>, String> {
     ///         std::thread::sleep(task1_approx_dur);
-    ///         let elapsed_content = format!("instant 1 enlapsed by now {}", instant1.elapsed().subsec_millis());
+    ///         let elapsed_content = format!(
+    ///             "instant 1 enlapsed by now {}",
+    ///             instant1.elapsed().subsec_millis()
+    ///         );
     ///         // for OnError demo, change the line above like so: (will return error)
     ///         // let elapsed_content = format!("notsparatedbyspace{}", instant1.elapsed().subsec_millis();
     ///         let mut vec_ui32 = Vec::new();
@@ -53,9 +56,9 @@ where
     ///             return Futurized::OnComplete(vec_ui32);
     ///         } else {
     ///             return Futurized::OnError(
-    ///                 "On task 1 there's an error occured:
-    ///                 there's no valid u32 in elapsed_content
-    ///                 at futurize/src/example.rs line 136\n".to_string(),
+    ///                 "task 1 error:
+    ///                 unable to parse u32
+    ///                 at futurize/src/example.rs line 28\n".to_string(),
     ///             );
     ///         }
     ///     });
@@ -99,6 +102,9 @@ where
     ///             }
     ///         }
     ///         std::thread::sleep(Duration::from_millis(100));
+    ///         if !task2.awake() && !task2.awake() {
+    ///            break;
+    ///         }
     ///     }
     ///     let all_approxed_durs = task2_approx_dur + task1_approx_dur;
     ///     println!(
@@ -120,10 +126,11 @@ where
     }
 
     /// Try (it won't block current thread) wake the task and then try get later somewhere.
+    #[inline]
     pub fn try_wake(&self) {
         let awaiting = &*self.awaiting;
-        if !awaiting.load(Ordering::Relaxed) {
-            awaiting.store(true, Ordering::Relaxed);
+        if !awaiting.load(Ordering::SeqCst) {
+            awaiting.store(true, Ordering::SeqCst);
             let ready = Arc::clone(&self.ready);
             let closure = Arc::clone(&self.closure);
             let cvar = Arc::clone(&self.cvar);
@@ -132,50 +139,53 @@ where
                 let (mtx, cvar) = &*cvar;
                 let mut mtx = mtx.lock();
                 *mtx = result;
-                ready.store(true, Ordering::Relaxed);
+                ready.store(true, Ordering::SeqCst);
                 cvar.notify_one();
             });
         }
     }
 
     /// Wait until the task is completed and then get (careful, this is blocking operation).
+    #[inline]
     pub fn get(&self) -> Futurized<T, E> {
-        &self.try_wake();
+        self.try_wake();
         let (mtx, cvar) = &*self.cvar;
         let mut mtx = mtx.lock();
         cvar.wait(&mut mtx);
-        let result = mtx.clone();
         let awaiting = &*self.awaiting;
         let ready = &*self.ready;
-        awaiting.store(false, Ordering::Relaxed);
-        ready.store(false, Ordering::Relaxed);
+        let result = mtx.clone();
         *mtx = Futurized::OnProgress;
+        ready.store(false, Ordering::SeqCst);
+        awaiting.store(false, Ordering::SeqCst);
         result
     }
 
     /// Try get if the task is awake, it won't block current thread (non-blocking).
+    #[inline]
     pub fn try_get(&self) -> Futurized<T, E> {
         let awaiting = &*self.awaiting;
-        if awaiting.load(Ordering::Relaxed) {
+        if awaiting.load(Ordering::SeqCst) {
             let ready = &*self.ready;
-            if ready.load(Ordering::Relaxed) {
+            if ready.load(Ordering::SeqCst) {
+                ready.store(false, Ordering::SeqCst);
                 let mtx = &self.cvar.0;
                 let mut mtx = mtx.lock();
                 let result = mtx.clone();
-                awaiting.store(false, Ordering::Relaxed);
-                ready.store(false, Ordering::Relaxed);
                 *mtx = Futurized::OnProgress;
+                awaiting.store(false, Ordering::SeqCst);
                 result
             } else {
                 Futurized::OnProgress
             }
         } else {
-            &self.try_wake();
+            self.try_wake();
             Futurized::OnProgress
         }
     }
 
     /// Check if the task is awake.
+    #[inline(always)]
     pub fn awake(&self) -> bool {
         let awaiting = &*self.awaiting;
         awaiting.load(Ordering::Relaxed)

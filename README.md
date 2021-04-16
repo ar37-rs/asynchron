@@ -34,9 +34,9 @@ fn main() {
             return Futurized::OnComplete(vec_ui32);
         } else {
             return Futurized::OnError(
-                "On task 1 there's an error occured:
-                there's no valid u32 in elapsed_content
-                at futurize/src/example.rs line 136\n"
+                "task 1 error:
+                unable to parse u32
+                at futurize/src/example.rs line 28\n"
                     .to_string(),
             );
         }
@@ -81,6 +81,9 @@ fn main() {
             }
         }
         std::thread::sleep(Duration::from_millis(100));
+        if !task2.awake() && !task2.awake() {
+            break;
+        }
     }
     let all_approxed_durs = task2_approx_dur + task1_approx_dur;
     println!(
