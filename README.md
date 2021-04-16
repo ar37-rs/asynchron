@@ -74,7 +74,6 @@ fn main() {
                         "task 2 completed at: {:?} has value: {:?}\n",
                         task2_approx_dur, value
                     );
-                    break;
                 }
                 Futurized::OnProgress => println!("waiting the task 2 to complete\n"),
                 _ => (),
