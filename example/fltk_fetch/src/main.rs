@@ -83,7 +83,7 @@ fn main() -> Result<()> {
             loading_frame.show();
             match request.try_get() {
                 OnError(e) => {
-                    label = e.to_string();
+                    label = e;
                 }
                 OnProgress => {
                     if let Ok(msg) = rx.try_recv() {
