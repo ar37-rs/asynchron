@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 asynchron = "0.1"
 fltk = { version = "0.16", features = ["fltk-bundled"] }
-crossbeam-channel = "0.5"
+# optional
+# crossbeam-channel = "0.5"
 reqwest = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread"] }
