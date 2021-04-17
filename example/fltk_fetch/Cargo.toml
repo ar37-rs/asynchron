@@ -1,0 +1,14 @@
+[package]
+name = "fltk_fetch"
+version = "0.1.0"
+authors = ["Ar37-rs <adyaro37@gmail.com>"]
+edition = "2018"
+publish = false
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+asynchron = "0.1"
+fltk = { version = "0.16", features = ["fltk-bundled"] }
+crossbeam-channel = "0.5"
+reqwest = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread"] }

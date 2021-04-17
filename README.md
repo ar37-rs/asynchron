@@ -91,3 +91,7 @@ fn main() {
     )
 }
 ```
+
+## More Example
+
+mixing sync and async can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/example).
