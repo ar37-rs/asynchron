@@ -5,8 +5,7 @@ use asynchron::{
 use fltk::{app::*, button::*, frame::*, window::*};
 use std::{
     io::Result,
-    cell::RefCell,
-    rc::Rc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::runtime::Builder;
@@ -16,7 +15,8 @@ fn main() -> Result<()> {
     app.set_scheme(Scheme::Gtk);
     let mut wind = Window::new(100, 100, 400, 300, "Hello from rust");
     let mut timer_frame = Frame::new(0, 0, 400, 100, "");
-    let loading_frame = Rc::new(RefCell::new(Frame::new(80, 60, 200, 200, "")));
+    let loading_frame = Arc::new(Mutex::new(Frame::new(80, 60, 200, 200, "")));
+
     let mut but: Button = Button::new(160, 210, 80, 40, "Fetch");
     wind.end();
     wind.show_with_args(&["-nokbd"]);
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
 
             for i in 0..5 {
                 let _ = tx.send(format!("checking status... {}", i));
-                std::thread::sleep(Duration::from_millis(100));
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
 
             if respose.status().is_success() {
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
 
                 for _ in 0..5 {
                     let _ = tx.send(status.clone());
-                    std::thread::sleep(Duration::from_millis(100));
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
 
                 match respose.text().await {
@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     but.set_callback(move || {
         let request = request_clone.to_owned();
         if !request.awake() {
-            let mut loading_frame = loading_frame_clone.borrow_mut();
+            let mut loading_frame = loading_frame_clone.lock().unwrap();
             loading_frame.set_label("loading...");
         }
         request.try_wake();
@@ -78,12 +78,12 @@ fn main() -> Result<()> {
     while app.wait() {
         std::thread::sleep(Duration::from_millis(10));
 
-        let mut loading_frame = loading_frame.borrow_mut();
+        let mut loading_frame = loading_frame.lock().unwrap();
         if request.awake() {
             loading_frame.show();
             match request.try_get() {
                 OnError(e) => {
-                    label = e;
+                    label = e.to_string();
                 }
                 OnProgress => {
                     if let Ok(msg) = rx.try_recv() {
@@ -101,4 +101,3 @@ fn main() -> Result<()> {
     }
     Ok(())
 }
-
