@@ -85,7 +85,7 @@ fn main() -> Result<()> {
         if request.awake() {
             match request.try_get() {
                 OnError(e) => {
-                    label = e.to_string();
+                    label = e;
                 }
                 OnProgress => {
                     if let Ok(rx) = rx.try_recv() {
