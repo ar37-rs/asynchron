@@ -103,10 +103,10 @@ fn main() -> Result<()> {
         }
 
         if timer % 2 == 0 {
-             set_url.set("https://hyper.rs");
-         } else {
-             set_url.set("https://www.rust-lang.org");
-         }
+            set_url.set("https://hyper.rs");
+        } else {
+            set_url.set("https://www.rust-lang.org");
+        }
         
         timer += 1;
         timer_frame.set_label(timer.to_string().as_ref());
