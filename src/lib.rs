@@ -6,14 +6,14 @@ use std::{sync::Arc, thread};
 #[derive(Clone, Debug)]
 /// Simple helper thread safe state management (using Arc<(Mutex<T>, Condvar)> under the hood).
 pub struct State<T> {
-    item: Arc<(Mutex<Option<T>>, Condvar)>,
+    item: Arc<(Mutex<T>, Condvar)>,
 }
 
 impl<T: Clone + Send + Sync + ?Sized> State<T> {
     /// Create new state.
     pub fn new(item: T) -> State<T> {
         State {
-            item: Arc::new((Mutex::new(Some(item)), Condvar::new())),
+            item: Arc::new((Mutex::new(item), Condvar::new())),
         }
     }
 
@@ -21,7 +21,7 @@ impl<T: Clone + Send + Sync + ?Sized> State<T> {
     pub async fn async_set(&self, item: T) {
         let (mtx, cvar) = &*self.item;
         let mut mtx = mtx.lock();
-        *mtx = Some(item);
+        *mtx = item;
         cvar.notify_one();
     }
 
@@ -31,9 +31,10 @@ impl<T: Clone + Send + Sync + ?Sized> State<T> {
         if mtx.is_locked() {
             let mut mtx = mtx.lock();
             cvar.wait(&mut mtx);
-            mtx.clone().unwrap()
+            mtx.clone()
         } else {
-            mtx.lock().clone().unwrap()
+            let mtx = mtx.lock();
+            mtx.clone()
         }
     }
 
@@ -41,7 +42,7 @@ impl<T: Clone + Send + Sync + ?Sized> State<T> {
     pub fn set(&self, item: T) {
         let (mtx, cvar) = &*self.item;
         let mut mtx = mtx.lock();
-        *mtx = Some(item);
+        *mtx = item;
         cvar.notify_one();
     }
 
@@ -51,10 +52,10 @@ impl<T: Clone + Send + Sync + ?Sized> State<T> {
         if mtx.is_locked() {
             let mut mtx = mtx.lock();
             cvar.wait(&mut mtx);
-            mtx.clone().unwrap()
+            mtx.clone()
         } else {
             let mtx = mtx.lock();
-            mtx.clone().unwrap()
+            mtx.clone()
         }
     }
 }

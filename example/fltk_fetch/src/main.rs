@@ -1,13 +1,10 @@
 use asynchron::{
     Futurize,
-    Futurized::{self, OnComplete, OnError, OnProgress}, State
+    Futurized::{self, OnComplete, OnError, OnProgress},
+    State,
 };
 use fltk::{app::*, button::*, frame::*, window::*};
-use std::{
-    io::Result,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{cell::RefCell, io::Result, rc::Rc, time::Duration};
 use tokio::runtime::Builder;
 
 fn main() -> Result<()> {
@@ -15,7 +12,9 @@ fn main() -> Result<()> {
     app.set_scheme(Scheme::Gtk);
     let mut wind = Window::new(100, 100, 400, 300, "Hello from rust");
     let mut timer_frame = Frame::new(0, 0, 400, 100, "");
-    let loading_frame = Arc::new(Mutex::new(Frame::new(80, 60, 200, 200, "")));
+
+    // Frame lives only on the main thread, Arc+Mutex is unnecessary, using Rc+Refcell is appropriate.
+    let loading_frame = Rc::new(RefCell::new(Frame::new(80, 60, 200, 200, "")));
 
     let mut but: Button = Button::new(160, 210, 80, 40, "Fetch");
     wind.end();
@@ -37,7 +36,7 @@ fn main() -> Result<()> {
                 Err(e) => return OnError(e.to_string()),
             };
 
-           for i in 0..5  {
+            for i in 0..5 {
                 let _ = tx.send(format!("checking status... {}", i));
                 std::thread::sleep(Duration::from_millis(100));
             }
@@ -69,7 +68,7 @@ fn main() -> Result<()> {
     but.set_callback(move || {
         let request = request_clone.to_owned();
         if !request.awake() {
-            let mut loading_frame = loading_frame_clone.lock().unwrap();
+            let mut loading_frame = loading_frame_clone.borrow_mut();
             loading_frame.set_label("loading...");
         }
         request.try_wake();
@@ -82,7 +81,7 @@ fn main() -> Result<()> {
     while app.wait() {
         std::thread::sleep(Duration::from_millis(10));
 
-        let mut loading_frame = loading_frame.lock().unwrap();
+        let mut loading_frame = loading_frame.borrow_mut();
         if request.awake() {
             match request.try_get() {
                 OnError(e) => {
@@ -107,7 +106,7 @@ fn main() -> Result<()> {
         } else {
             set_url.set("https://www.rust-lang.org");
         }
-        
+
         timer += 1;
         timer_frame.set_label(timer.to_string().as_ref());
         wind.redraw();
