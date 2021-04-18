@@ -35,7 +35,7 @@ fn main() -> Result<()> {
 
             for i in 0..5 {
                 let _ = tx.send(format!("checking status... {}", i));
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await
             }
 
             if respose.status().is_success() {
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
 
                 for _ in 0..5 {
                     let _ = tx.send(status.clone());
-                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await
                 }
 
                 match respose.text().await {
