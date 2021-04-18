@@ -1,6 +1,6 @@
 [package]
 name = "asynchron"
-version = "0.1.5"
+version = "0.1.6"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 edition = "2018"
 description = "Asynchronize blocking operation."

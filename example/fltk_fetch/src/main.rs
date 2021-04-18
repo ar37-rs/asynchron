@@ -1,6 +1,6 @@
 use asynchron::{
     Futurize,
-    Futurized::{self, OnComplete, OnError, OnProgress},
+    Futurized::{self, OnComplete, OnError, OnProgress}, State
 };
 use fltk::{app::*, button::*, frame::*, window::*};
 use std::{
@@ -21,6 +21,9 @@ fn main() -> Result<()> {
     wind.end();
     wind.show_with_args(&["-nokbd"]);
 
+    let url = State::new("https://www.rust-lang.org");
+    let set_url = url.clone();
+
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
     let request = Futurize::task(move || -> Futurized<String, String> {
         let rt = match Builder::new_current_thread().enable_all().build() {
@@ -28,14 +31,15 @@ fn main() -> Result<()> {
             Err(e) => return OnError(e.to_string()),
         };
         rt.block_on(async {
-            let respose = match reqwest::get("https://www.rust-lang.org/").await {
+            let url = url.async_get().await;
+            let respose = match reqwest::get(url).await {
                 Ok(respose) => respose,
                 Err(e) => return OnError(e.to_string()),
             };
 
-            for i in 0..5 {
+           for i in 0..5  {
                 let _ = tx.send(format!("checking status... {}", i));
-                tokio::time::sleep(Duration::from_millis(100)).await
+                std::thread::sleep(Duration::from_millis(100));
             }
 
             if respose.status().is_success() {
@@ -43,7 +47,7 @@ fn main() -> Result<()> {
 
                 for _ in 0..5 {
                     let _ = tx.send(status.clone());
-                    tokio::time::sleep(Duration::from_millis(100)).await
+                    std::thread::sleep(Duration::from_millis(100));
                 }
 
                 match respose.text().await {
@@ -80,21 +84,30 @@ fn main() -> Result<()> {
 
         let mut loading_frame = loading_frame.lock().unwrap();
         if request.awake() {
-            loading_frame.show();
             match request.try_get() {
                 OnError(e) => {
                     label = e.to_string();
                 }
                 OnProgress => {
-                    if let Ok(msg) = rx.try_recv() {
-                        loading_frame.set_label(&msg);
+                    if let Ok(rx) = rx.try_recv() {
+                        loading_frame.set_label(&rx);
                     }
                 }
-                OnComplete(value) => label = value,
+                OnComplete(value) => {
+                    label = value;
+                }
             }
+            loading_frame.show();
         } else {
             loading_frame.set_label(&label);
         }
+
+        if timer % 2 == 0 {
+             set_url.set("https://hyper.rs");
+         } else {
+             set_url.set("https://www.rust-lang.org");
+         }
+        
         timer += 1;
         timer_frame.set_label(timer.to_string().as_ref());
         wind.redraw();
