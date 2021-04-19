@@ -51,8 +51,8 @@ fn main() -> Result<()> {
                 Err(e) => return OnError(e.to_string()),
             };
 
-            let respose = match client.execute(request).await {
-                Ok(respose) => respose,
+            let response = match client.execute(request).await {
+                Ok(response) => response,
                 Err(e) => return OnError(e.to_string()),
             };
 
