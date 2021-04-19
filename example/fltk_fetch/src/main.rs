@@ -7,6 +7,7 @@ use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*};
 use reqwest::Client;
 use std::{io::Result, time::Duration};
 use tokio::runtime::Builder;
+
 fn main() -> Result<()> {
     let mut app = App::default();
     app.set_scheme(Scheme::Gtk);
