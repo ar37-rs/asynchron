@@ -3,35 +3,54 @@ use asynchron::{
     Futurized::{self, OnComplete, OnError, OnProgress},
     State,
 };
-use fltk::{app::*, button::*, frame::*, window::*};
-use std::{cell::RefCell, io::Result, rc::Rc, time::Duration};
+use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*};
+use reqwest::Client;
+use std::{io::Result, time::Duration};
 use tokio::runtime::Builder;
-
 fn main() -> Result<()> {
     let mut app = App::default();
     app.set_scheme(Scheme::Gtk);
-    let mut wind = Window::new(100, 100, 400, 300, "Hello from rust");
-    let mut timer_frame = Frame::new(0, 0, 400, 100, "");
+    let mut wind = Window::default().with_size(400, 300);
+    wind.set_label("Hello from rust");
+    let mut timer_frame = Frame::default().with_label("");
+    timer_frame.set_pos(0, 0);
+    timer_frame.set_size(400, 100);
 
-    // Frame lives only on the main thread, Arc+Mutex is unnecessary, using Rc+Refcell is appropriate.
-    let loading_frame = Rc::new(RefCell::new(Frame::new(80, 60, 200, 200, "")));
+    let mut loading_frame = Frame::default().with_label("");
+    loading_frame.set_pos(80, 60);
+    loading_frame.set_size(200, 200);
 
-    let mut but: Button = Button::new(160, 210, 80, 40, "Fetch");
-    wind.end();
+    let mut but: Button = Button::default().with_label("Fetch");
+    but.set_pos(160, 210);
+    but.set_size(80, 40);
+
     wind.show_with_args(&["-nokbd"]);
 
     let url = State::new("https://www.rust-lang.org");
     let set_url = url.clone();
 
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
-    let request = Futurize::task(move || -> Futurized<String, String> {
-        let rt = match Builder::new_current_thread().enable_all().build() {
+    let reqwest = Futurize::task(move || -> Futurized<String, String> {
+        let rt = match Builder::new_multi_thread().enable_all().build() {
             Ok(rt) => rt,
             Err(e) => return OnError(e.to_string()),
         };
+
         rt.block_on(async {
+            // timeout connection for 5 seconds, so there's a noise if something goes wrong.
+            let time_out = Duration::from_secs(5);
+            let client = match Client::builder().timeout(time_out).build() {
+                Ok(respose) => respose,
+                Err(e) => return OnError(e.to_string()),
+            };
+
             let url = url.async_get().await;
-            let respose = match reqwest::get(url).await {
+            let request = match client.get(url).build() {
+                Ok(request) => request,
+                Err(e) => return OnError(e.to_string()),
+            };
+
+            let respose = match client.execute(request).await {
                 Ok(respose) => respose,
                 Err(e) => return OnError(e.to_string()),
             };
@@ -61,17 +80,15 @@ fn main() -> Result<()> {
         })
     });
 
-    let request_clone = request.clone();
+    let reqwest_clone = reqwest.clone();
+    let mut loading_frame_clone = loading_frame.clone();
 
-    let loading_frame_clone = loading_frame.clone();
-
-    but.set_callback(move || {
-        let request = request_clone.to_owned();
-        if !request.awake() {
-            let mut loading_frame = loading_frame_clone.borrow_mut();
-            loading_frame.set_label("loading...");
+    but.set_callback(move |_| {
+        let reqwest = reqwest_clone.to_owned();
+        if !reqwest.awake() {
+            loading_frame_clone.set_label("loading...");
         }
-        request.try_wake();
+        reqwest.try_wake();
     });
 
     let mut label = String::new();
@@ -81,11 +98,11 @@ fn main() -> Result<()> {
     while app.wait() {
         std::thread::sleep(Duration::from_millis(10));
 
-        let mut loading_frame = loading_frame.borrow_mut();
-        if request.awake() {
-            match request.try_get() {
+        if reqwest.awake() {
+            match reqwest.try_get() {
                 OnError(e) => {
-                    label = e;
+                    eprintln!("error {}", &e);
+                    label = e.clone();
                 }
                 OnProgress => {
                     if let Ok(rx) = rx.try_recv() {
@@ -108,6 +125,7 @@ fn main() -> Result<()> {
         }
 
         timer += 1;
+
         timer_frame.set_label(timer.to_string().as_ref());
         wind.redraw();
     }
