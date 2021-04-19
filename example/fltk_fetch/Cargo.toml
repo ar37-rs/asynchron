@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 asynchron = "0.1"
-fltk = { version = "0.16", features = ["fltk-bundled"] }
+fltk = { version = "1", features = ["fltk-bundled"] }
 # optional
 # crossbeam-channel = "0.5"
 reqwest = "0.11"
