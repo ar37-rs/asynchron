@@ -41,7 +41,7 @@ fn main() -> Result<()> {
             // timeout connection for 10 seconds, so there's a noise if something goes wrong.
             let time_out = Duration::from_secs(10);
             let client = match Client::builder().timeout(time_out).build() {
-                Ok(respose) => respose,
+                Ok(client) => client,
                 Err(e) => return OnError(e.to_string()),
             };
 
