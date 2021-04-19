@@ -61,22 +61,22 @@ fn main() -> Result<()> {
                 std::thread::sleep(Duration::from_millis(100));
             }
 
-            if respose.status().is_success() {
-                let status = respose.status().to_string();
+            if response.status().is_success() {
+                let status = response.status().to_string();
 
                 for _ in 0..5 {
                     let _ = tx.send(status.clone());
                     std::thread::sleep(Duration::from_millis(100));
                 }
 
-                match respose.text().await {
+                match response.text().await {
                     Ok(text) => {
                         return OnComplete(text[0..100].to_string());
                     }
                     Err(e) => return OnError(e.to_string()),
                 }
             } else {
-                return OnError(respose.status().to_string());
+                return OnError(response.status().to_string());
             }
         })
     });
