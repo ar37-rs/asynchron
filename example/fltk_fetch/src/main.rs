@@ -32,6 +32,7 @@ fn main() -> Result<()> {
 
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
     let reqwest = Futurize::task(move || -> Futurized<String, String> {
+        // Builder::new_current_thread().enable_all().build() also working fine on this context.
         let rt = match Builder::new_multi_thread().enable_all().build() {
             Ok(rt) => rt,
             Err(e) => return OnError(e.to_string()),
