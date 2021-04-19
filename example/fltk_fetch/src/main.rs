@@ -38,8 +38,8 @@ fn main() -> Result<()> {
         };
 
         rt.block_on(async {
-            // timeout connection for 5 seconds, so there's a noise if something goes wrong.
-            let time_out = Duration::from_secs(5);
+            // timeout connection for 10 seconds, so there's a noise if something goes wrong.
+            let time_out = Duration::from_secs(10);
             let client = match Client::builder().timeout(time_out).build() {
                 Ok(respose) => respose,
                 Err(e) => return OnError(e.to_string()),
