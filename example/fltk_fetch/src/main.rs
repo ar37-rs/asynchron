@@ -104,7 +104,7 @@ fn main() -> Result<()> {
             match reqwest.try_get() {
                 OnError(e) => {
                     eprintln!("error {}", &e);
-                    label = e.clone();
+                    label = e;
                 }
                 OnProgress => {
                     if let Ok(rx) = rx.try_recv() {
