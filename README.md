@@ -22,7 +22,7 @@ fn main() {
             instant1.elapsed().subsec_millis()
         );
         // for OnError demo, change the line above like so: (will return error)
-        // let elapsed_content = format!("notsparatedbyspace{}", instant1.elapsed().subsec_millis();
+        // let elapsed_content = format!("notsparatedbyspace{}", instant1.elapsed().subsec_millis());
         let mut vec_ui32 = Vec::new();
         elapsed_content
             .split(" ")
