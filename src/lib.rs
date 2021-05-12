@@ -72,7 +72,7 @@ pub enum Futurized<T, E> {
 }
 
 #[derive(Clone)]
-/// Futurize task asyncronously.
+/// Futurize task asynchronously.
 pub struct Futurize<T, E> {
     closure: Arc<dyn Send + Sync + Fn() -> Futurized<T, E>>,
     cvar: Arc<(Mutex<Futurized<T, E>>, Condvar)>,
