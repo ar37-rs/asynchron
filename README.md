@@ -28,7 +28,7 @@ fn main() {
                 return Progress::Completed(instant.elapsed().subsec_millis());
             }
         });
-        tasks.push(task);
+        tasks.push(task)
     }
 
     for task in tasks.iter() {
@@ -42,22 +42,19 @@ fn main() {
                 match task.try_get() {
                     Progress::Current => {
                         if task.task_id() == 0 || task.task_id() == 3 {
-                            task.cancel();
+                            task.cancel()
                         }
-                        println!("task with id: {} is trying to be done\n", task.task_id());
+                        println!("task with id: {} is trying to be done\n", task.task_id())
                     }
                     Progress::Canceled =>  println!("task with id: {} is canceled\n", task.task_id()),
-                    Progress::Completed(elapsed) => {
-                        println!(
-                            "task with id: {} elapsed at: {:?} milliseconds\n",
-                            task.task_id(), elapsed
-                        );
-                    }
+                    Progress::Completed(elapsed) => println!(
+                        "task with id: {} elapsed at: {:?} milliseconds\n",task.task_id(), elapsed
+                    ),
                     _ => (),
                 }
 
                 if task.is_done() {
-                    task_count -= 1;
+                    task_count -= 1
                 }
             }
         }
@@ -66,7 +63,7 @@ fn main() {
             println!("all the tasks are done.");
             break;
         }
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(Duration::from_millis(50))
     }
 }
 ```
