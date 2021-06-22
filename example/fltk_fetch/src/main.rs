@@ -117,7 +117,7 @@ fn main() -> Result<()> {
                         loading_frame.set_label(&rx);
                     }
                 }
-                Progress::Canceled => label = "Request cancled.".to_owned(),
+                Progress::Canceled => label = "Request canceled.".to_owned(),
                 Progress::Completed(value) => label = value,
                 Progress::Error(e) => {
                     eprintln!("error {}", &e);
