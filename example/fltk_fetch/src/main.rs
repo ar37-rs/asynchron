@@ -61,7 +61,7 @@ fn main() -> Result<()> {
 
             for i in 0..5 {
                 let _ = tx.send(format!("checking status... {}", i));
-                std::thread::sleep(Duration::from_millis(100));
+                std::thread::sleep(Duration::from_millis(100))
             }
 
             if response.status().is_success() {
@@ -69,7 +69,7 @@ fn main() -> Result<()> {
 
                 for _ in 0..5 {
                     let _ = tx.send(status.clone());
-                    std::thread::sleep(Duration::from_millis(100));
+                    std::thread::sleep(Duration::from_millis(100))
                 }
 
                 match response.text().await {
@@ -93,13 +93,11 @@ fn main() -> Result<()> {
     let reqwest_cancel = reqwest.clone();
 
     button_fetch.set_callback(move |_| {
-        let reqwest = reqwest_fetch.to_owned();
-        reqwest.try_do();
+        reqwest_fetch.try_do()
     });
 
     button_cancel.set_callback(move |_| {
-        let reqwest = reqwest_cancel.to_owned();
-        reqwest.cancel();
+        reqwest_cancel.cancel()
     });
 
     let mut label = String::new();
@@ -114,14 +112,14 @@ fn main() -> Result<()> {
                 Progress::Current => {
                     button_fetch.set_label("Fetching...");
                     if let Ok(rx) = rx.try_recv() {
-                        loading_frame.set_label(&rx);
+                        loading_frame.set_label(&rx)
                     }
                 }
                 Progress::Canceled => label = "Request canceled.".to_owned(),
                 Progress::Completed(value) => label = value,
                 Progress::Error(e) => {
                     eprintln!("error {}", &e);
-                    label = e;
+                    label = e
                 }
             }
             loading_frame.show();
@@ -129,19 +127,19 @@ fn main() -> Result<()> {
                 button_fetch.set_label("Fetch")
             }
         } else {
-            loading_frame.set_label(&label);
+            loading_frame.set_label(&label)
         }
 
         if timer % 2 == 0 {
-            url.set("https://hyper.rs");
+            url.set("https://hyper.rs")
         } else {
-            url.set("https://www.rust-lang.org");
+            url.set("https://www.rust-lang.org")
         }
 
         timer += 1;
 
         timer_frame.set_label(timer.to_string().as_ref());
-        wind.redraw();
+        wind.redraw()
     }
     Ok(())
 }
