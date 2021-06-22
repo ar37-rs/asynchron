@@ -1,21 +1,21 @@
 use asynchron::{
     Futurize,
-    Futurized::{self, OnComplete},
+    Progress,
 };
 use std::io::Result;
 
 #[test]
 fn count() -> Result<()> {
-    let closure = Futurize::task(move || -> Futurized<i32, ()> {
+    let closure = Futurize::task(0, move |_| -> Progress <i32, ()> {
         let mut counter = 0;
         counter += 1;
-        return OnComplete(counter);
+        return Progress::Completed(counter);
     });
-    closure.try_wake();
+    closure.try_do();
     loop {
-        if closure.awake() {
+        if closure.is_on_progress() {
             match closure.try_get() {
-                Futurized::OnComplete(counter) => {
+                Progress::Completed(counter) => {
                     println!("counter value {}", counter);
                     assert_eq!(counter, 1);
                     break;

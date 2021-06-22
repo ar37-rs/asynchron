@@ -1,6 +1,6 @@
 [package]
 name = "asynchron"
-version = "0.1.7"
+version = "0.2.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 edition = "2018"
 description = "Asynchronize blocking operation."
@@ -13,3 +13,9 @@ repository = "https://github.com/Ar37-rs/asynchron"
 
 [dependencies.parking_lot]
 version = "0.11"
+
+[dependencies.cfg-if]
+version = "1"
+
+[features]
+blocking = []

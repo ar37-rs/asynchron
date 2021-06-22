@@ -1,6 +1,6 @@
 use asynchron::{
     Futurize,
-    Futurized::{self, OnComplete, OnError, OnProgress},
+    Progress,
     State,
 };
 use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*};
@@ -18,24 +18,26 @@ fn main() -> Result<()> {
     timer_frame.set_size(400, 100);
 
     let mut loading_frame = Frame::default().with_label("");
-    loading_frame.set_pos(80, 60);
+    loading_frame.set_pos(100, 60);
     loading_frame.set_size(200, 200);
 
-    let mut but: Button = Button::default().with_label("Fetch");
-    but.set_pos(160, 210);
-    but.set_size(80, 40);
+    let mut button_fetch: Button = Button::default().with_label("Fetch");
+    button_fetch.set_pos(120, 210);
+    button_fetch.set_size(80, 40);
+    let mut button_cancel: Button = Button::default().with_label("Cancel").right_of(&button_fetch, 10);
+    button_cancel.set_size(80, 40);
 
     wind.show_with_args(&["-nokbd"]);
 
     let url = State::new("https://www.rust-lang.org");
-    let set_url = url.clone();
+    let _url = url.clone();
 
     let (tx, rx) = std::sync::mpsc::sync_channel(0);
-    let reqwest = Futurize::task(move || -> Futurized<String, String> {
+    let reqwest = Futurize::task(0, move |canceled| -> Progress<String, String> {
         // Builder::new_current_thread().enable_all().build() also working fine on this context.
         let rt = match Builder::new_multi_thread().enable_all().build() {
             Ok(rt) => rt,
-            Err(e) => return OnError(e.to_string()),
+            Err(e) => return Progress::Error(e.to_string()),
         };
 
         rt.block_on(async {
@@ -43,18 +45,18 @@ fn main() -> Result<()> {
             let time_out = Duration::from_secs(10);
             let client = match Client::builder().timeout(time_out).build() {
                 Ok(client) => client,
-                Err(e) => return OnError(e.to_string()),
+                Err(e) => return Progress::Error(e.to_string()),
             };
 
-            let url = url.async_get().await;
+            let url = _url.async_get().await;
             let request = match client.get(url).build() {
                 Ok(request) => request,
-                Err(e) => return OnError(e.to_string()),
+                Err(e) => return Progress::Error(e.to_string()),
             };
 
             let response = match client.execute(request).await {
                 Ok(response) => response,
-                Err(e) => return OnError(e.to_string()),
+                Err(e) => return Progress::Error(e.to_string()),
             };
 
             for i in 0..5 {
@@ -72,25 +74,32 @@ fn main() -> Result<()> {
 
                 match response.text().await {
                     Ok(text) => {
-                        return OnComplete(text[0..100].to_string());
+                        // cancel at the end of the tunnel.
+                        if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+                            return Progress::Canceled;
+                        } else {
+                            return Progress::Completed(text[0..100].to_string());
+                        }   
                     }
-                    Err(e) => return OnError(e.to_string()),
+                    Err(e) => return Progress::Error(e.to_string()),
                 }
             } else {
-                return OnError(response.status().to_string());
+                return Progress::Error(response.status().to_string());
             }
         })
     });
 
-    let reqwest_clone = reqwest.clone();
-    let mut loading_frame_clone = loading_frame.clone();
+    let reqwest_fetch = reqwest.clone();
+    let reqwest_cancel = reqwest.clone();
 
-    but.set_callback(move |_| {
-        let reqwest = reqwest_clone.to_owned();
-        if !reqwest.awake() {
-            loading_frame_clone.set_label("loading...");
-        }
-        reqwest.try_wake();
+    button_fetch.set_callback(move |_| {
+        let reqwest = reqwest_fetch.to_owned();
+        reqwest.try_do();
+    });
+
+    button_cancel.set_callback(move |_| {
+        let reqwest = reqwest_cancel.to_owned();
+        reqwest.cancel();
     });
 
     let mut label = String::new();
@@ -100,30 +109,33 @@ fn main() -> Result<()> {
     while app.wait() {
         std::thread::sleep(Duration::from_millis(10));
 
-        if reqwest.awake() {
+        if reqwest.is_on_progress() {
             match reqwest.try_get() {
-                OnError(e) => {
-                    eprintln!("error {}", &e);
-                    label = e;
-                }
-                OnProgress => {
+                Progress::Current => {
+                    button_fetch.set_label("Fetching...");
                     if let Ok(rx) = rx.try_recv() {
                         loading_frame.set_label(&rx);
                     }
                 }
-                OnComplete(value) => {
-                    label = value;
+                Progress::Canceled => label = "Request cancled.".to_owned(),
+                Progress::Completed(value) => label = value,
+                Progress::Error(e) => {
+                    eprintln!("error {}", &e);
+                    label = e;
                 }
             }
             loading_frame.show();
+            if reqwest.is_done() {
+                button_fetch.set_label("Fetch")
+            }
         } else {
             loading_frame.set_label(&label);
         }
 
         if timer % 2 == 0 {
-            set_url.set("https://hyper.rs");
+            url.set("https://hyper.rs");
         } else {
-            set_url.set("https://www.rust-lang.org");
+            url.set("https://www.rust-lang.org");
         }
 
         timer += 1;
