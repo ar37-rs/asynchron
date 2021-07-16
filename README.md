@@ -38,7 +38,7 @@ fn main() {
     let mut task_count = tasks.len();
     loop {
         for task in tasks.iter() {
-            if task.is_on_progress() {
+            if task.is_in_progress() {
                 match task.try_get() {
                     Progress::Current => {
                         if task.task_id() == 0 || task.task_id() == 3 {
