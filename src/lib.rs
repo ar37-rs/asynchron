@@ -117,7 +117,7 @@ cfg_if! {
         ///     let mut task_count = tasks.len();
         ///     loop {
         ///         for task in tasks.iter() {
-        ///             if task.is_on_progress() {
+        ///             if task.is_in_progress() {
         ///                 match task.try_get() {
         ///                     Progress::Current => {
         ///                         if task.task_id() == 0 || task.task_id() == 3 {
@@ -228,7 +228,7 @@ where
     ///     // let mut retry = 0;
     ///
     ///     loop {
-    ///         if task1.is_on_progress() {
+    ///         if task1.is_in_progress() {
     ///             match task1.try_get() {
     ///                 Progress::Current => {
     ///                     println!("task 1 is trying to be done\n");
@@ -253,7 +253,7 @@ where
     ///         //     break;
     ///         // }
     ///
-    ///         if task2.is_on_progress() {
+    ///         if task2.is_in_progress() {
     ///             match task2.try_get() {
     ///                 Progress::Current => println!("task 2 is trying to be done\n"),
     ///                 Progress::Completed(value) => {
@@ -312,7 +312,7 @@ where
         }
     }
 
-    /// Try (it won't block current thread) do the task now and then try get the progress somewhere later on.
+    /// Try (it won't block the current thread) to do the task now and then try to get the progress somewhere later on.
     #[inline]
     pub fn try_do(&self) {
         let awaiting = &self.states.0;
@@ -361,7 +361,7 @@ where
         self._cancel.load(Ordering::Relaxed)
     }
 
-    /// get the id of the task
+    /// Get the id of the task
     #[inline(always)]
     pub fn task_id(&self) -> u32 {
         self.id
@@ -382,7 +382,7 @@ where
         result
     }
 
-    /// Try get the progress of the task, it won't block current thread (non-blocking).
+    /// Try to get the progress of the task, it won't block current thread (non-blocking).
     #[inline]
     pub fn try_get(&self) -> Progress<T, E> {
         if self.states.0.load(Ordering::Relaxed) {
@@ -409,9 +409,9 @@ where
         }
     }
 
-    /// Check if the task is on progress.
+    /// Check if the task is in progress.
     #[inline(always)]
-    pub fn is_on_progress(&self) -> bool {
+    pub fn is_in_progress(&self) -> bool {
         self.states.0.load(Ordering::Relaxed)
     }
 
