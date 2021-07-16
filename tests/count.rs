@@ -13,7 +13,7 @@ fn count() -> Result<()> {
     });
     closure.try_do();
     loop {
-        if closure.is_on_progress() {
+        if closure.is_in_progress() {
             match closure.try_get() {
                 Progress::Completed(counter) => {
                     println!("counter value {}", counter);
