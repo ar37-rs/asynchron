@@ -107,7 +107,7 @@ fn main() -> Result<()> {
     while app.wait() {
         std::thread::sleep(Duration::from_millis(10));
 
-        if reqwest.is_on_progress() {
+        if reqwest.is_in_progress() {
             match reqwest.try_get() {
                 Progress::Current => {
                     button_fetch.set_label("Fetching...");

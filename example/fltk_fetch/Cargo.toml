@@ -7,7 +7,7 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-asynchron = "0.2.0"
+asynchron = "0.3.0"
 fltk = { version = "1" }
 # optional
 # crossbeam-channel = "0.5"
