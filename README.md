@@ -70,6 +70,6 @@ fn main() {
 
 ## More Example
 
-Compact example with egui [here](https://github.com/Ar37-rs/egui-extras-lib/tree/main/example).
+Compact example with egui [here](https://github.com/Ar37-rs/egui-extras-lib/tree/main/example),
 
 Mixing sync and async with tokio, reqwest and fltk-rs can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/example).
