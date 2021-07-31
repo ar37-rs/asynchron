@@ -1,7 +1,8 @@
 use asynchron::{
     Futurize,
+    ITaskHandle,
     Progress,
-    State,
+    SyncState,
 };
 use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*};
 use reqwest::Client;
@@ -29,11 +30,11 @@ fn main() -> Result<()> {
 
     wind.show_with_args(&["-nokbd"]);
 
-    let url = State::new("https://www.rust-lang.org");
+    let url = SyncState::new("https://www.rust-lang.org");
     let _url = url.clone();
 
-    let (tx, rx) = std::sync::mpsc::sync_channel(0);
-    let reqwest = Futurize::task(0, move |canceled| -> Progress<String, String> {
+    let reqwest = Futurize::task(0, move |_task: ITaskHandle<String>| -> Progress<String, String, String> {
+        
         // Builder::new_current_thread().enable_all().build() also working fine on this context.
         let rt = match Builder::new_multi_thread().enable_all().build() {
             Ok(rt) => rt,
@@ -48,7 +49,7 @@ fn main() -> Result<()> {
                 Err(e) => return Progress::Error(e.to_string()),
             };
 
-            let url = _url.async_get().await;
+            let url = *_url.get();
             let request = match client.get(url).build() {
                 Ok(request) => request,
                 Err(e) => return Progress::Error(e.to_string()),
@@ -60,7 +61,7 @@ fn main() -> Result<()> {
             };
 
             for i in 0..5 {
-                let _ = tx.send(format!("checking status... {}", i));
+                let _ = _task.send(format!("checking status... {}", i));
                 std::thread::sleep(Duration::from_millis(100))
             }
 
@@ -68,14 +69,14 @@ fn main() -> Result<()> {
                 let status = response.status().to_string();
 
                 for _ in 0..5 {
-                    let _ = tx.send(status.clone());
+                    let _ = _task.send(status.clone());
                     std::thread::sleep(Duration::from_millis(100))
                 }
 
                 match response.text().await {
                     Ok(text) => {
                         // cancel at the end of the tunnel.
-                        if canceled.load(std::sync::atomic::Ordering::Relaxed) {
+                        if _task.is_canceled() {
                             return Progress::Canceled;
                         } else {
                             return Progress::Completed(text[0..100].to_string());
@@ -89,15 +90,18 @@ fn main() -> Result<()> {
         })
     });
 
-    let reqwest_fetch = reqwest.clone();
-    let reqwest_cancel = reqwest.clone();
+    let reqwest_fetch = reqwest.handle();
+    let reqwest_cancel = reqwest.cancelation_handle();
 
     button_fetch.set_callback(move |_| {
         reqwest_fetch.try_do()
     });
 
     button_cancel.set_callback(move |_| {
-        reqwest_cancel.cancel()
+        reqwest_cancel.cancel();
+        if reqwest_cancel.is_canceled() {
+            println!("canceled")
+        }
     });
 
     let mut label = String::new();
@@ -109,10 +113,10 @@ fn main() -> Result<()> {
 
         if reqwest.is_in_progress() {
             match reqwest.try_get() {
-                Progress::Current => {
+                Progress::Current(task_receiver) => {
                     button_fetch.set_label("Fetching...");
-                    if let Ok(rx) = rx.try_recv() {
-                        loading_frame.set_label(&rx)
+                    if let Some(value) = task_receiver {
+                        loading_frame.set_label(&value)
                     }
                 }
                 Progress::Canceled => label = "Request canceled.".to_owned(),

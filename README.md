@@ -9,67 +9,72 @@ Asynchronize blocking operation.
 ## Example
 
 ```rust
-use asynchron::{Futurize, Progress};
+use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
 use std::time::{Duration, Instant};
 
 fn main() {
     let instant: Instant = Instant::now();
-
-    let mut tasks = Vec::new();
-
-    for i in 0..5 {
-        let task = Futurize::task(i, move |cancel| -> Progress<u32, ()> {
-            let millis = i + 1;
-            let sleep_dur = Duration::from_millis((60 * millis).into());
+    let task: Futurized<String, u32, String> = Futurize::task(
+        0,
+        move |_task: ITaskHandle<String>| -> Progress<String, u32, String> {
+            let sleep_dur = Duration::from_millis(10);
             std::thread::sleep(sleep_dur);
-            if cancel.load(std::sync::atomic::Ordering::Relaxed) {
-                return Progress::Canceled;
+            let value = format!("The task wake up from sleep");
+            // Send current task progress.
+            // let _ = _task.send(value); (to ignore sender error in some specific cases if needed).
+            if let Err(e) = _task.send(value) {
+                // Return error immedietly
+                // !WARNING!
+                // if always ignoring error,
+                // Undefined Behavior there's always a chance to occur and hard to debug,
+                // always return error for safety in many cases (recommended), rather than unwrapping.
+                return Progress::Error(format!(
+                    "Progress error while sending state: {}",
+                    e.to_string(),
+                ));
+            }
+
+            if _task.is_canceled() {
+                let _ = _task.send("Canceling the task".into());
+                Progress::Canceled
             } else {
-                return Progress::Completed(instant.elapsed().subsec_millis());
+                Progress::Completed(instant.elapsed().subsec_millis())
             }
-        });
-        tasks.push(task)
-    }
+        },
+    );
 
-    for task in tasks.iter() {
-        task.try_do()
-    }
+    // Try do the task now.
+    task.try_do();
 
-    let mut task_count = tasks.len();
     loop {
-        for task in tasks.iter() {
-            if task.is_in_progress() {
-                match task.try_get() {
-                    Progress::Current => {
-                        if task.task_id() == 0 || task.task_id() == 3 {
-                            task.cancel()
-                        }
-                        println!("task with id: {} is trying to be done\n", task.task_id())
+        if task.is_in_progress() {
+            match task.try_get() {
+                Progress::Current(task_receiver) => {
+                    if let Some(value) = task_receiver {
+                        println!("{}\n", value)
                     }
-                    Progress::Canceled =>  println!("task with id: {} is canceled\n", task.task_id()),
-                    Progress::Completed(elapsed) => println!(
-                        "task with id: {} elapsed at: {:?} milliseconds\n",task.task_id(), elapsed
-                    ),
-                    _ => (),
+                    // Cancel if need to.
+                    // task.cancel();
                 }
-
-                if task.is_done() {
-                    task_count -= 1
+                Progress::Canceled => {
+                    println!("The task was canceled\n")
+                }
+                Progress::Completed(elapsed) => {
+                    println!("The task finished in: {:?} milliseconds\n", elapsed)
+                }
+                Progress::Error(e) => {
+                    println!("{}\n", e)
                 }
             }
-        }
 
-        if task_count == 0 {
-            println!("all the tasks are done.");
-            break;
+            if task.is_done() {
+                break;
+            }
         }
-        std::thread::sleep(Duration::from_millis(50))
     }
 }
 ```
 
 ## More Example
-
-Compact example with egui [here](https://github.com/Ar37-rs/egui-extras-lib/tree/main/example),
 
 Mixing sync and async with tokio, reqwest and fltk-rs can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/example).

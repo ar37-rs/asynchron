@@ -1,12 +1,14 @@
 use asynchron::{
     Futurize,
+    Futurized,
     Progress,
+    InnerTaskHandle,
 };
 use std::io::Result;
 
 #[test]
 fn count() -> Result<()> {
-    let closure = Futurize::task(0, move |_| -> Progress <i32, ()> {
+    let closure: Futurized<(), i32, ()> = Futurize::task(0, move |_task: InnerTaskHandle| -> Progress <_,i32, ()> {
         let mut counter = 0;
         counter += 1;
         return Progress::Completed(counter);

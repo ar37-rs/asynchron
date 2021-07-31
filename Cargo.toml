@@ -1,12 +1,12 @@
 [package]
 name = "asynchron"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 edition = "2018"
 description = "Asynchronize blocking operation."
 documentation = "https://docs.rs/asynchron"
 readme = "README.md"
-keywords = ["async", "sync", "std"]
+keywords = ["async", "sync", "std", "multi-thread"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ar37-rs/asynchron"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -14,8 +14,5 @@ repository = "https://github.com/Ar37-rs/asynchron"
 [dependencies.parking_lot]
 version = "0.11"
 
-[dependencies.cfg-if]
-version = "1"
-
-[features]
-blocking = []
+[dependencies.crossbeam-channel]
+version = "0.5"
