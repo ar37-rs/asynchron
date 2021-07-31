@@ -476,7 +476,7 @@ where
 
     /// Try to get the progress of the task, it won't block current thread (non-blocking).
     ///
-    /// WARNING! to prevent from data races this fn should be called once at time.
+    /// WARNING! to prevent from data races this fn should be called once at a time.
     pub fn try_get(&self) -> Progress<C, T, E> {
         let awaiting = &*self.task_handle.awaiting;
         if awaiting.load(Ordering::Relaxed) {
