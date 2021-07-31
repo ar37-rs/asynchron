@@ -23,7 +23,7 @@ fn main() {
             // Send current task progress.
             // let _ = _task.send(value); (to ignore sender error in some specific cases if needed).
             if let Err(e) = _task.send(value) {
-                // Return error immedietly
+                // Return error immediately
                 // !WARNING!
                 // if always ignoring error,
                 // Undefined Behavior there's always a chance to occur and hard to debug,
