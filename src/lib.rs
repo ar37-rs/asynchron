@@ -5,7 +5,10 @@ use core::{
 };
 use crossbeam_channel::{bounded, Receiver, SendError, Sender};
 use parking_lot::{Mutex, RwLock, RwLockReadGuard};
-use std::{sync::Arc, thread};
+use std::{
+    sync::{atomic::AtomicUsize, Arc},
+    thread,
+};
 
 #[derive(Clone)]
 /// Simple helper thread safe state management,
@@ -199,7 +202,7 @@ pub type InnerTaskHandle = ITaskHandle<()>;
 pub struct TaskHandle<C, T, E> {
     _id: usize,
     closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<C, T, E>>,
-    states: Arc<(AtomicBool, Mutex<Progress<C, T, E>>)>,
+    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<C, T, E>>)>,
     task_handle: ITaskHandle<C>,
 }
 
@@ -214,6 +217,15 @@ where
         self._id
     }
 
+    /// Set stack size (in bytes) of the thread for spawning Futurized task,
+    ///
+    /// Rust's official doc: https://doc.rust-lang.org/std/thread/struct.Builder.html#method.stack_size
+    ///
+    /// if the given value is zero or default, it will use Rust's standard stack size.
+    pub fn stack_size(&self, size: usize) {
+        self.states.1.store(size, Ordering::Relaxed)
+    }
+
     /// Try (it won't block the current thread) to do the task now,
     ///
     /// and then try to get the progress from the original task (if the task is in progress).
@@ -222,15 +234,25 @@ where
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
             self.task_handle.cancel.store(FAL, Ordering::Relaxed);
+            let _stack_size = self.states.1.load(Ordering::Relaxed);
             let states = Arc::clone(&self.states);
             let closure = Arc::clone(&self.closure);
             let inner_task_handle = self.task_handle.clone();
-            thread::spawn(move || {
-                let (ready, mtx) = &*states;
+            let task = move || {
+                let (ready, _, mtx) = &*states;
                 let result = closure(inner_task_handle);
                 *mtx.lock() = result;
                 ready.store(TRU, Ordering::Relaxed)
-            });
+            };
+            if _stack_size == ZER {
+                thread::spawn(task);
+            } else {
+                // Should panic if the given stack size value is incorrect, so it's better to unwrap() here.
+                thread::Builder::new()
+                    .stack_size(_stack_size)
+                    .spawn(task)
+                    .unwrap();
+            }
         }
     }
 
@@ -357,7 +379,11 @@ impl<C, T, E> Futurize<C, T, E> {
         Futurized {
             _id: id,
             closure: Arc::new(f),
-            states: Arc::new((AtomicBool::new(FAL), Mutex::new(Progress::Current(None)))),
+            states: Arc::new((
+                AtomicBool::new(FAL),
+                AtomicUsize::new(ZER),
+                Mutex::new(Progress::Current(None)),
+            )),
             receiver,
             task_handle: ITaskHandle {
                 _id: id,
@@ -375,7 +401,7 @@ impl<C, T, E> Futurize<C, T, E> {
 pub struct Futurized<C, T, E> {
     _id: usize,
     closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<C, T, E>>,
-    states: Arc<(AtomicBool, Mutex<Progress<C, T, E>>)>,
+    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<C, T, E>>)>,
     receiver: Receiver<C>,
     task_handle: ITaskHandle<C>,
 }
@@ -386,6 +412,15 @@ where
     T: Clone + Send + 'static,
     E: Clone + Send + 'static,
 {
+    /// Set stack size (in bytes) of the thread for spawning Futurized task,
+    ///
+    /// Rust's official doc: https://doc.rust-lang.org/std/thread/struct.Builder.html#method.stack_size
+    ///
+    /// if the given value is zero or default, it will use Rust's standard stack size.
+    pub fn stack_size(&self, size: usize) {
+        self.states.1.store(size, Ordering::Relaxed)
+    }
+
     /// Try (it won't block the current thread) to do the task now,
     ///
     /// and then try to get the progress (if the task is in progress).
@@ -394,15 +429,25 @@ where
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
             self.task_handle.cancel.store(FAL, Ordering::Relaxed);
+            let _stack_size = self.states.1.load(Ordering::Relaxed);
             let states = Arc::clone(&self.states);
             let closure = Arc::clone(&self.closure);
             let task_handle = self.task_handle.clone();
-            thread::spawn(move || {
-                let (ready, mtx) = &*states;
+            let task = move || {
+                let (ready, _, mtx) = &*states;
                 let result = closure(task_handle);
                 *mtx.lock() = result;
                 ready.store(TRU, Ordering::Relaxed)
-            });
+            };
+            if _stack_size == ZER {
+                thread::spawn(task);
+            } else {
+                // Should panic if the given stack size value is incorrect, so it's better to unwrap() here.
+                thread::Builder::new()
+                    .stack_size(_stack_size)
+                    .spawn(task)
+                    .unwrap();
+            }
         }
     }
 
@@ -484,7 +529,7 @@ where
             if ready.load(Ordering::SeqCst) {
                 ready.store(FAL, Ordering::SeqCst);
                 self.task_handle.pause.store(FAL, Ordering::Relaxed);
-                let mtx = &self.states.1;
+                let mtx = &self.states.2;
                 let mut mtx = mtx.lock();
                 let result = mtx.clone();
                 *mtx = Progress::Current(None);

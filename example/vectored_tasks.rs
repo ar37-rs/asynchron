@@ -12,7 +12,7 @@ fn main() {
                 let sleep_dur = Duration::from_millis((10 * millis) as u64);
                 std::thread::sleep(sleep_dur);
                 let value = format!("The task with id: {} wake up from sleep", _task.id());
-                // Send current task progress.
+                // // Send current task progress.
                 // let _ = _task.send(value); (to ignore sender error in some specific cases if needed).
                 if let Err(err) = _task.send(value) {
                     // Return error immediately
@@ -40,10 +40,11 @@ fn main() {
         vec_opt_tasks.push(Some(task))
     }
 
-    let mut count_down = vec_opt_tasks.len();
+    let num_tasks = vec_opt_tasks.len();
+    let mut count_down = num_tasks;
 
     loop {
-        for i in 0..vec_opt_tasks.len() {
+        for i in 0..num_tasks {
             if let Some(task) = &vec_opt_tasks[i] {
                 if task.is_in_progress() {
                     match task.try_get() {
@@ -51,9 +52,17 @@ fn main() {
                             if let Some(value) = task_receiver {
                                 println!("{}\n", value)
                             }
-                            // Cancel if need to.
+                            // // Cancel if need to.
                             // if (task.id() % 2 != 0) || (task.id() == 0) {
                             //     task.cancel()
+                            // }
+
+                            // // or terminate if need to.
+                            // // change the line above like so: "if let Some(task) = vec_opt_tasks[i].clone() {..."
+                            // // and then simply set some items of vec_opt_tasks to None.
+                            // if (task.id() % 2 != 0) || (task.id() == 0) {
+                            //     vec_opt_tasks[i] = None;
+                            //     count_down -= 1
                             // }
                         }
                         Progress::Canceled => {

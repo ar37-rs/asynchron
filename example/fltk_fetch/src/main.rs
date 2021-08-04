@@ -22,10 +22,10 @@ fn main() -> Result<()> {
     loading_frame.set_pos(100, 60);
     loading_frame.set_size(200, 200);
 
-    let mut button_fetch: Button = Button::default().with_label("Fetch");
+    let mut button_fetch = Button::default().with_label("Fetch");
     button_fetch.set_pos(120, 210);
     button_fetch.set_size(80, 40);
-    let mut button_cancel: Button = Button::default().with_label("Cancel").right_of(&button_fetch, 10);
+    let mut button_cancel = Button::default().with_label("Cancel").right_of(&button_fetch, 10);
     button_cancel.set_size(80, 40);
 
     wind.show_with_args(&["-nokbd"]);
@@ -98,9 +98,10 @@ fn main() -> Result<()> {
     });
 
     button_cancel.set_callback(move |_| {
-        reqwest_cancel.cancel();
         if reqwest_cancel.is_canceled() {
             println!("canceled")
+        } else {
+            reqwest_cancel.cancel()
         }
     });
 
