@@ -1,13 +1,13 @@
 [package]
 name = "fltk_fetch"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 edition = "2018"
 publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-asynchron = "0.4.1"
+asynchron = "0.5.0"
 # asynchron = { path = "../../../asynchron" }
 fltk = { version = "1" }
 reqwest = "0.11"

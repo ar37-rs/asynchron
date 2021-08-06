@@ -1,5 +1,8 @@
 use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-use std::time::{Duration, Instant};
+use std::{
+    convert::Infallible,
+    time::{Duration, Instant},
+};
 
 fn main() {
     let instant: Instant = Instant::now();
@@ -11,24 +14,22 @@ fn main() {
                 let millis = _task.id() + 1;
                 let sleep_dur = Duration::from_millis((10 * millis) as u64);
                 std::thread::sleep(sleep_dur);
-                let value = format!("The task with id: {} wake up from sleep", _task.id());
-                // // Send current task progress.
-                // let _ = _task.send(value); (to ignore sender error in some specific cases if needed).
-                if let Err(err) = _task.send(value) {
-                    // Return error immediately
-                    // !WARNING!
-                    // if always ignoring error,
-                    // Undefined Behavior there's always a chance to occur and hard to debug,
-                    // always return error for safety in many cases (recommended), rather than unwrapping.
-                    return Progress::Error(format!(
-                        "The task with id: {} progress error while sending state: {}",
-                        _task.id(),
-                        err.to_string(),
-                    ));
+                let result = Ok::<String, Infallible>(format!(
+                    "The task with id: {} wake up from sleep",
+                    _task.id()
+                ));
+                // Send current task progress.
+                if let Ok(value) = result {
+                    _task.send(value);
+                } else {
+                    // return error immediately if something not right, for example:
+                    return Progress::Error(
+                        "Something ain't right..., programmer out of bounds.".into(),
+                    );
                 }
-
                 if _task.is_canceled() {
-                    let _ = _task.send(format!("Canceling the task with id: {}", _task.id()));
+                    let value = format!("Canceling the task with id: {}", _task.id());
+                    _task.send(value);
                     Progress::Canceled
                 } else {
                     Progress::Completed(instant.elapsed().subsec_millis())

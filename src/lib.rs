@@ -1,75 +1,62 @@
 #![deny(unsafe_code)]
 use core::{
     marker::PhantomData,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
-use crossbeam_channel::{bounded, Receiver, SendError, Sender};
-use parking_lot::{Mutex, RwLock, RwLockReadGuard};
 use std::{
-    sync::{atomic::AtomicUsize, Arc},
+    sync::{Arc, Condvar, Mutex, RwLock, RwLockReadGuard},
     thread,
 };
-
-#[derive(Clone)]
-/// Simple helper thread safe state management,
-///
-/// uses std::sync::Arc and fast RwLock<T> [read/write lock] from parking_lot crate under the hood.
-///
-/// # Example:
-///
-///```
-///use asynchron::SyncState;
-///
-///fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
-///    let state: SyncState<i32> = SyncState::new(0);
-///    let _state = state.clone();
-///
-///    if let Err(_) = std::thread::spawn(move||{
-///        _state.set(20);
-///    }).join() {
-///        let e = std::io::Error::new(std::io::ErrorKind::Other, "Unable to join thread.");
-///        return Err(Box::new(e));
-///    }
-///
-///    let values: (i32, i32) = (*state.get(), *state.get());
-///    println!("{:?}", values);
-///    Ok(())
-///}
-///```
-pub struct SyncState<T> {
-    item: Arc<RwLock<T>>,
-}
-
-impl<T: Clone + Send + Sync + ?Sized> SyncState<T> {
-    /// Create new state.
-    pub fn new(t: T) -> SyncState<T> {
-        SyncState {
-            item: Arc::new(RwLock::new(t)),
-        }
-    }
-
-    /// Get state.
-    pub fn get(&self) -> RwLockReadGuard<'_, T> {
-        let rwx = &*self.item;
-        rwx.read()
-    }
-
-    /// Set state.
-    pub fn set(&self, t: T) {
-        let rwx = &*self.item;
-        let mut rwx = rwx.write();
-        *rwx = t
-    }
-}
 
 const ZER: usize = 0;
 const TRU: bool = true;
 const FAL: bool = false;
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone)]
+pub struct Channel<C> {
+    data: Arc<(AtomicBool, Mutex<Option<C>>, Condvar)>,
+}
+
+impl<C: Clone + Send + 'static> Channel<C> {
+    fn init() -> Self {
+        Self {
+            data: Arc::new((AtomicBool::new(FAL), Mutex::new(None), Condvar::new())),
+        }
+    }
+
+    pub fn send(&self, t: C) {
+        let (ready, mtx, cvar) = &*self.data;
+        if let Ok(mut mtx) = mtx.lock() {
+            *mtx = Some(t);
+            ready.store(TRU, Ordering::Relaxed);
+            let _ = cvar.wait(mtx);
+        }
+    }
+
+    pub fn try_recv(&self) -> Option<C> {
+        let ready = &self.data.0;
+        if ready.load(Ordering::Relaxed) {
+            let (_, mtx, cvar) = &*self.data;
+            let data = if let Ok(mut mtx) = mtx.lock() {
+                let data = mtx.clone();
+                *mtx = None;
+                data
+            } else {
+                None
+            };
+            ready.store(FAL, Ordering::Relaxed);
+            cvar.notify_all();
+            data
+        } else {
+            None
+        }
+    }
+}
+
 /// Result for Futurized task,
 ///
 /// where C: type of ITaskHandle sync sender value, T: type of Completed value, E: type of Error value.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Progress<C, T, E> {
     /// Current progress of the task
     Current(Option<C>),
@@ -79,8 +66,8 @@ pub enum Progress<C, T, E> {
     Error(E),
 }
 
-#[derive(Clone)]
 /// Resume/Suspend handle of the task.
+#[derive(Clone)]
 pub struct RespendHandle {
     _id: usize,
     pause: Arc<AtomicBool>,
@@ -110,8 +97,8 @@ impl RespendHandle {
     }
 }
 
-#[derive(Clone)]
 /// Cancelation handle of the task.
+#[derive(Clone)]
 pub struct CancelationHandle {
     _id: usize,
     cancel: Arc<AtomicBool>,
@@ -136,23 +123,21 @@ impl CancelationHandle {
     }
 }
 
-#[derive(Clone)]
 /// Inner handle of the task,
 ///
 /// where C: type of sync sender value.
+#[derive(Clone)]
 pub struct ITaskHandle<C> {
     _id: usize,
     awaiting: Arc<AtomicBool>,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
-    sync_s: Sender<C>,
+    sync_s: Channel<C>,
 }
 
-impl<C> ITaskHandle<C> {
-    /// Send current progress of the task,
-    ///
-    /// fast synchronous sender from crossbeam_channel crate under the hood.
-    pub fn send(&self, t: C) -> Result<(), SendError<C>> {
+impl<C: Clone + Send + 'static> ITaskHandle<C> {
+    /// Send current progress of the task.
+    pub fn send(&self, t: C) {
         self.sync_s.send(t)
     }
 
@@ -185,7 +170,7 @@ impl<C> ITaskHandle<C> {
         self.cancel.store(TRU, Ordering::Relaxed)
     }
 
-    /// Check if progress of the task sould be canceled.
+    /// Check if progress of the task should be canceled.
     pub fn is_canceled(&self) -> bool {
         self.cancel.load(Ordering::Relaxed)
     }
@@ -196,9 +181,8 @@ impl<C> ITaskHandle<C> {
 /// Use this if there's no needed for sending current value through channel and if type of ITaskHandle sync sender value not necessary to be known.
 pub type InnerTaskHandle = ITaskHandle<()>;
 
+/// Handle of the task.
 #[derive(Clone)]
-/// Handle of the task,
-///
 pub struct TaskHandle<C, T, E> {
     _id: usize,
     closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<C, T, E>>,
@@ -241,7 +225,9 @@ where
             let task = move || {
                 let (ready, _, mtx) = &*states;
                 let result = closure(inner_task_handle);
-                *mtx.lock() = result;
+                if let Ok(mut mtx) = mtx.lock() {
+                    *mtx = result;
+                }
                 ready.store(TRU, Ordering::Relaxed)
             };
             if _stack_size == ZER {
@@ -301,7 +287,7 @@ where
 ///
 ///```
 ///use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-///use std::time::{Duration, Instant};
+///use std::{convert::Infallible, time::{Duration, Instant}};
 ///
 ///fn main() {
 ///    let instant: Instant = Instant::now();
@@ -310,21 +296,16 @@ where
 ///        move |_task: ITaskHandle<String>| -> Progress<String, u32, String> {
 ///            let sleep_dur = Duration::from_millis(10);
 ///            std::thread::sleep(sleep_dur);
-///            let value = format!("The task wake up from sleep");
 ///            // Send current task progress.
-///            // let _ = _task.send(value); (to ignore sender error in some specific cases if needed).
-///            if let Err(e) = _task.send(value) {
-///                // Return error immediately
-///                // !WARNING!
-///                // if always ignoring error,
-///                // Undefined Behavior there's always a chance to occur and hard to debug,
-///                // always return error for safety in many cases (recommended), rather than unwrapping.
-///                return Progress::Error(format!(
-///                    "Progress error while sending state: {}",
-///                    e.to_string(),
-///                ));
+///            let result = Ok::<String, Infallible>("The task  wake up from sleep.".into());
+///            if let Ok(value) = result {
+///                _task.send(value);
+///            } else {
+///                // return error immediately if something not right, for example:
+///                return Progress::Error(
+///                    "Something ain't right..., programmer out of bounds.".into(),
+///                );
 ///            }
-///
 ///            if _task.is_canceled() {
 ///                let _ = _task.send("Canceling the task".into());
 ///                Progress::Canceled
@@ -345,7 +326,7 @@ where
 ///                        println!("{}\n", value)
 ///                    }
 ///                    // Cancel if need to.
-///                    // task.cancel();
+///                    // task.cancel()
 ///                }
 ///                Progress::Canceled => {
 ///                    println!("The task was canceled\n")
@@ -369,13 +350,13 @@ pub struct Futurize<C, T, E> {
     _data: PhantomData<(C, T, E)>,
 }
 
-impl<C, T, E> Futurize<C, T, E> {
+impl<C: Clone + Send + 'static, T, E> Futurize<C, T, E> {
     /// Create new task.
     pub fn task<F>(id: usize, f: F) -> Futurized<C, T, E>
     where
         F: Send + Sync + 'static + Fn(ITaskHandle<C>) -> Progress<C, T, E>,
     {
-        let (sender, receiver) = bounded::<C>(ZER);
+        let _channel = Channel::<C>::init();
         Futurized {
             _id: id,
             closure: Arc::new(f),
@@ -384,25 +365,25 @@ impl<C, T, E> Futurize<C, T, E> {
                 AtomicUsize::new(ZER),
                 Mutex::new(Progress::Current(None)),
             )),
-            receiver,
+            receiver: _channel.clone(),
             task_handle: ITaskHandle {
                 _id: id,
                 awaiting: Arc::new(AtomicBool::new(FAL)),
                 cancel: Arc::new(AtomicBool::new(FAL)),
                 pause: Arc::new(AtomicBool::new(FAL)),
-                sync_s: sender,
+                sync_s: _channel,
             },
         }
     }
 }
 
+/// Futurized task.
 #[derive(Clone)]
-/// Futurized task
 pub struct Futurized<C, T, E> {
     _id: usize,
     closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<C, T, E>>,
     states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<C, T, E>>)>,
-    receiver: Receiver<C>,
+    receiver: Channel<C>,
     task_handle: ITaskHandle<C>,
 }
 
@@ -436,7 +417,9 @@ where
             let task = move || {
                 let (ready, _, mtx) = &*states;
                 let result = closure(task_handle);
-                *mtx.lock() = result;
+                if let Ok(mut mtx) = mtx.lock() {
+                    *mtx = result;
+                }
                 ready.store(TRU, Ordering::Relaxed)
             };
             if _stack_size == ZER {
@@ -530,17 +513,17 @@ where
                 ready.store(FAL, Ordering::SeqCst);
                 self.task_handle.pause.store(FAL, Ordering::Relaxed);
                 let mtx = &self.states.2;
-                let mut mtx = mtx.lock();
-                let result = mtx.clone();
-                *mtx = Progress::Current(None);
+                let result = if let Ok(mut mtx) = mtx.lock() {
+                    let result = mtx.clone();
+                    *mtx = Progress::Current(None);
+                    result
+                } else {
+                    Progress::Current(None)
+                };
                 awaiting.store(FAL, Ordering::Relaxed);
                 result
             } else {
-                if let Ok(val) = self.receiver.try_recv() {
-                    Progress::Current(Some(val))
-                } else {
-                    Progress::Current(None)
-                }
+                Progress::Current(self.receiver.try_recv())
             }
         } else {
             Progress::Current(None)
@@ -555,5 +538,58 @@ where
     /// Check if the task isn't in progress anymore (done).
     pub fn is_done(&self) -> bool {
         !self.task_handle.awaiting.load(Ordering::Relaxed)
+    }
+}
+
+/// Simple (a bit costly) helper thread safe state management,
+///
+/// using std::sync::Arc and std::sync::RwLock under the hood.
+///
+/// # Example:
+///
+///```
+///use asynchron::SyncState;
+///
+///fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
+///    let state: SyncState<i32> = SyncState::new(0);
+///    let _state = state.clone();
+///
+///    if let Err(_) = std::thread::spawn(move||{
+///        _state.set(20);
+///    }).join() {
+///        let e = std::io::Error::new(std::io::ErrorKind::Other, "Unable to join thread.");
+///        return Err(Box::new(e));
+///    }
+///
+///    let values: (i32, i32) = (*state.get(), *state.get());
+///    println!("{:?}", values);
+///    Ok(())
+///}
+///```
+#[derive(Clone)]
+pub struct SyncState<T> {
+    item: Arc<RwLock<T>>,
+}
+
+impl<T: Clone + Send + Sync + ?Sized> SyncState<T> {
+    /// Create new state.
+    pub fn new(t: T) -> SyncState<T> {
+        SyncState {
+            item: Arc::new(RwLock::new(t)),
+        }
+    }
+
+    /// Get state.
+    pub fn get(&self) -> RwLockReadGuard<'_, T> {
+        let rwx = &*self.item;
+        rwx.read().unwrap()
+    }
+
+    /// Set state.
+    pub fn set(&self, t: T) {
+        let rwx = &*self.item;
+        if let Ok(mut rwx) = rwx.write() {
+            *rwx = t
+        }
     }
 }

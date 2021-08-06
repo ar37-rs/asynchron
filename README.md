@@ -10,7 +10,10 @@ Asynchronize blocking operation.
 
 ```rust
 use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-use std::time::{Duration, Instant};
+use std::{
+    convert::Infallible,
+    time::{Duration, Instant},
+};
 
 fn main() {
     let instant: Instant = Instant::now();
@@ -19,21 +22,16 @@ fn main() {
         move |_task: ITaskHandle<String>| -> Progress<String, u32, String> {
             let sleep_dur = Duration::from_millis(10);
             std::thread::sleep(sleep_dur);
-            let value = format!("The task wake up from sleep");
             // Send current task progress.
-            // let _ = _task.send(value); (to ignore sender error in some specific cases if needed).
-            if let Err(e) = _task.send(value) {
-                // Return error immediately
-                // !WARNING!
-                // if always ignoring error,
-                // Undefined Behavior there's always a chance to occur and hard to debug,
-                // always return error for safety in many cases (recommended), rather than unwrapping.
-                return Progress::Error(format!(
-                    "Progress error while sending state: {}",
-                    e.to_string(),
-                ));
+            let result = Ok::<String, Infallible>("The task  wake up from sleep.".into());
+            if let Ok(value) = result {
+                _task.send(value);
+            } else {
+                // return error immediately if something not right, for example:
+                return Progress::Error(
+                    "Something ain't right..., programmer out of bounds.".into(),
+                );
             }
-
             if _task.is_canceled() {
                 let _ = _task.send("Canceling the task".into());
                 Progress::Canceled
@@ -54,7 +52,7 @@ fn main() {
                         println!("{}\n", value)
                     }
                     // Cancel if need to.
-                    // task.cancel();
+                    // task.cancel()
                 }
                 Progress::Canceled => {
                     println!("The task was canceled\n")
