@@ -10,10 +10,7 @@ Asynchronize blocking operation.
 
 ```rust
 use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-use std::{
-    convert::Infallible,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 fn main() {
     let instant: Instant = Instant::now();
@@ -23,7 +20,7 @@ fn main() {
             let sleep_dur = Duration::from_millis(10);
             std::thread::sleep(sleep_dur);
             // Send current task progress.
-            let result = Ok::<String, Infallible>("The task  wake up from sleep.".into());
+            let result = Ok::<String, ()>("The task  wake up from sleep.".into());
             if let Ok(value) = result {
                 _task.send(value);
             } else {
