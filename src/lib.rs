@@ -318,14 +318,15 @@ where
 ///    // Try do the task now.
 ///    task.try_do();
 ///
+///    let mut exit = false;
 ///    loop {
-///        if task.is_in_progress() {
-///            match task.try_get() {
+///        task.try_resolve(|progress, resolved| {
+///            match progress {
 ///                Progress::Current(task_receiver) => {
 ///                    if let Some(value) = task_receiver {
 ///                        println!("{}\n", value)
 ///                    }
-///                    // Cancel if need to.
+///                    // // Cancel if need to.
 ///                    // task.cancel()
 ///                }
 ///                Progress::Canceled => {
@@ -339,9 +340,14 @@ where
 ///                }
 ///            }
 ///
-///            if task.is_done() {
-///                break;
+///            if resolved {
+///                // This scope act like "finally block", do final things here.
+///                exit = true
 ///            }
+///        });
+///
+///        if exit {
+///            break;
 ///        }
 ///    }
 ///}
@@ -509,8 +515,7 @@ where
         let awaiting = &*self.task_handle.awaiting;
         if awaiting.load(Ordering::Relaxed) {
             let ready = &self.states.0;
-            if ready.load(Ordering::SeqCst) {
-                ready.store(FAL, Ordering::SeqCst);
+            if ready.load(Ordering::Relaxed) {
                 self.task_handle.pause.store(FAL, Ordering::Relaxed);
                 let mtx = &self.states.2;
                 // there's almost zero chance to deadlock,
@@ -518,6 +523,7 @@ where
                 let mut mtx = mtx.lock().unwrap();
                 let result = mtx.clone();
                 *mtx = Progress::Current(None);
+                ready.store(FAL, Ordering::Relaxed);
                 awaiting.store(FAL, Ordering::Relaxed);
                 result
             } else {
@@ -525,6 +531,27 @@ where
             }
         } else {
             Progress::Current(None)
+        }
+    }
+
+    /// Try resolve the progress of the task,
+    ///
+    /// this fn is equivalent to:
+    ///```
+    ///if task.is_in_progress() {
+    ///    match task.try_get() {
+    ///        ...
+    ///    }
+    ///}
+    ///```
+    /// WARNING! to prevent from data races this fn should be called once at a time.
+    #[inline]
+    pub fn try_resolve<F: FnOnce(Progress<C, T, E>, bool) -> ()>(&self, f: F) {
+        if self.task_handle.awaiting.load(Ordering::Relaxed) {
+            f(
+                self.try_get(),
+                !self.task_handle.awaiting.load(Ordering::Relaxed),
+            )
         }
     }
 

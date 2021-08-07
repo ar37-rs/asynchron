@@ -41,14 +41,15 @@ fn main() {
     // Try do the task now.
     task.try_do();
 
+    let mut exit = false;
     loop {
-        if task.is_in_progress() {
-            match task.try_get() {
+        task.try_resolve(|progress, resolved| {
+            match progress {
                 Progress::Current(task_receiver) => {
                     if let Some(value) = task_receiver {
                         println!("{}\n", value)
                     }
-                    // Cancel if need to.
+                    // // Cancel if need to.
                     // task.cancel()
                 }
                 Progress::Canceled => {
@@ -62,9 +63,14 @@ fn main() {
                 }
             }
 
-            if task.is_done() {
-                break;
+            if resolved {
+                // This scope act like "finally block", do final things here.
+                exit = true
             }
+        });
+
+        if exit {
+            break;
         }
     }
 }

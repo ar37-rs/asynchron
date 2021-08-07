@@ -3,7 +3,7 @@ use std::io::Result;
 
 #[test]
 fn drive() -> Result<()> {
-    let closure: Futurized<usize, i32, ()> = Futurize::task(
+    let task: Futurized<usize, i32, ()> = Futurize::task(
         0,
         move |_task: ITaskHandle<usize>| -> Progress<_, i32, ()> {
             for i in 0..5 {
@@ -14,25 +14,33 @@ fn drive() -> Result<()> {
             return Progress::Completed(counter);
         },
     );
-    closure.try_do();
+    task.try_do();
     let mut sum = 0;
+    let mut exit = false;
     loop {
-        if closure.is_in_progress() {
-            match closure.try_get() {
+        task.try_resolve(|progress, resolved| {
+            match progress {
                 Progress::Current(receiver) => {
                     if let Some(val) = receiver {
                         sum += val;
                     }
                 }
                 Progress::Completed(counter) => {
-                    println!("\nsum value: {}\n", sum);
-                    assert_eq!(sum, 10);
-                    println!("counter value: {}\n", counter);
+                    println!("\ncounter value: {}", counter);
                     assert_eq!(counter, 1);
-                    break;
                 }
                 _ => (),
             }
+            
+            if resolved {
+                println!("sum value: {}\n", sum);
+                assert_eq!(sum, 10);
+                exit = true
+            }
+        });
+
+        if exit {
+            break;
         }
     }
     Ok(())

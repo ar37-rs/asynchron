@@ -44,44 +44,42 @@ fn main() {
     loop {
         for i in 0..num_tasks {
             if let Some(task) = &vec_opt_tasks[i] {
-                if task.is_in_progress() {
-                    match task.try_get() {
-                        Progress::Current(task_receiver) => {
-                            if let Some(value) = task_receiver {
-                                println!("{}\n", value)
-                            }
-                            // // Cancel if need to.
-                            // if (task.id() % 2 != 0) || (task.id() == 0) {
-                            //     task.cancel()
-                            // }
+                task.try_resolve(|progress, _| match progress {
+                    Progress::Current(task_receiver) => {
+                        if let Some(value) = task_receiver {
+                            println!("{}\n", value)
+                        }
+                        // // Cancel if need to.
+                        // if (task.id() % 2 != 0) || (task.id() == 0) {
+                        //     task.cancel()
+                        // }
 
-                            // // or terminate if need to.
-                            // // change the line above like so: "if let Some(task) = vec_opt_tasks[i].clone() {..."
-                            // // and then simply set some items of vec_opt_tasks to None.
-                            // if (task.id() % 2 != 0) || (task.id() == 0) {
-                            //     vec_opt_tasks[i] = None;
-                            //     count_down -= 1
-                            // }
-                        }
-                        Progress::Canceled => {
-                            println!("The task with id: {} was canceled\n", task.id())
-                        }
-                        Progress::Completed(elapsed) => {
-                            println!(
-                                "The task with id: {} finished in: {:?} milliseconds\n",
-                                task.id(),
-                                elapsed
-                            )
-                        }
-                        Progress::Error(err) => {
-                            println!("{}", err)
-                        }
+                        // // or terminate if need to.
+                        // // change the line above like so: "if let Some(task) = vec_opt_tasks[i].clone() {..."
+                        // // and then simply set some items of vec_opt_tasks to None.
+                        // if (task.id() % 2 != 0) || (task.id() == 0) {
+                        //     vec_opt_tasks[i] = None;
+                        //     count_down -= 1
+                        // }
                     }
+                    Progress::Canceled => {
+                        println!("The task with id: {} was canceled\n", task.id())
+                    }
+                    Progress::Completed(elapsed) => {
+                        println!(
+                            "The task with id: {} finished in: {:?} milliseconds\n",
+                            task.id(),
+                            elapsed
+                        )
+                    }
+                    Progress::Error(err) => {
+                        println!("{}", err)
+                    }
+                });
 
-                    if task.is_done() {
-                        vec_opt_tasks[i] = None;
-                        count_down -= 1;
-                    }
+                if task.is_done() {
+                    vec_opt_tasks[i] = None;
+                    count_down -= 1;
                 }
             }
         }
