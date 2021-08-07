@@ -59,7 +59,7 @@ fn main() -> Result<()> {
                 };
 
                 for i in 0..5 {
-                    let _ = _task.send(format!("checking status... {}", i));
+                    _task.send(format!("checking status... {}", i));
                     std::thread::sleep(Duration::from_millis(100))
                 }
 
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
                     let status = response.status().to_string();
 
                     for _ in 0..5 {
-                        let _ = _task.send(status.clone());
+                        _task.send(status.clone());
                         std::thread::sleep(Duration::from_millis(100))
                     }
 

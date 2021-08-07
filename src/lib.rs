@@ -307,7 +307,7 @@ where
 ///                );
 ///            }
 ///            if _task.is_canceled() {
-///                let _ = _task.send("Canceling the task".into());
+///                _task.send("Canceling the task".into());
 ///                Progress::Canceled
 ///            } else {
 ///                Progress::Completed(instant.elapsed().subsec_millis())
