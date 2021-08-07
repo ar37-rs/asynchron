@@ -514,7 +514,7 @@ where
                 self.task_handle.pause.store(FAL, Ordering::Relaxed);
                 let mtx = &self.states.2;
                 // there's almost zero chance to deadlock,
-                // already guarded + with 2 atomicbools (awaiting and ready), so it's safe to unrwap here.
+                // already guarded + with 2 atomicbools (awaiting and ready), so it's safe to unwrap here.
                 let mut mtx = mtx.lock().unwrap();
                 let result = mtx.clone();
                 *mtx = Progress::Current(None);
