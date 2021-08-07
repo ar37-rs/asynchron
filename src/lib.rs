@@ -538,11 +538,11 @@ where
     ///
     /// this fn is equivalent to:
     ///```
-    ///if task.is_in_progress() {
-    ///    match task.try_get() {
-    ///        ...
-    ///    }
-    ///}
+    /// //if task.is_in_progress() {
+    /// //   match task.try_get() {
+    /// //       ...
+    /// //   }
+    /// //}
     ///```
     /// WARNING! to prevent from data races this fn should be called once at a time.
     #[inline]
