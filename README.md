@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/asynchron.svg)](https://crates.io/crates/asynchron)
 [![Asynchron documentation](https://docs.rs/asynchron/badge.svg)](https://docs.rs/asynchron)
-[![Rust](https://github.com/Ar37-rs/asynchron/actions/workflows/rust.yml/badge.svg)](https://github.com/Ar37-rs/asynchron/actions/workflows/rust.yml)
+[![CI](https://github.com/Ar37-rs/asynchron/actions/workflows/rust.yml/badge.svg)](https://github.com/Ar37-rs/asynchron/actions/workflows/rust.yml)
 
 Asynchronize blocking operation.
 
