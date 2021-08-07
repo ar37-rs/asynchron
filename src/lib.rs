@@ -4,7 +4,7 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::{
-    sync::{Arc, Condvar, Mutex, RwLock, RwLockReadGuard},
+    sync::{Arc, Condvar, Mutex},
     thread,
 };
 
@@ -287,7 +287,7 @@ where
 ///
 ///```
 ///use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-///use std::{convert::Infallible, time::{Duration, Instant}};
+///use std::time::{Duration, Instant};
 ///
 ///fn main() {
 ///    let instant: Instant = Instant::now();
@@ -297,7 +297,7 @@ where
 ///            let sleep_dur = Duration::from_millis(10);
 ///            std::thread::sleep(sleep_dur);
 ///            // Send current task progress.
-///            let result = Ok::<String, Infallible>("The task  wake up from sleep.".into());
+///            let result = Ok::<String, ()>("The task  wake up from sleep.".into());
 ///            if let Ok(value) = result {
 ///                _task.send(value);
 ///            } else {
@@ -513,8 +513,8 @@ where
                 ready.store(FAL, Ordering::SeqCst);
                 self.task_handle.pause.store(FAL, Ordering::Relaxed);
                 let mtx = &self.states.2;
-                // there's no chance to deadlock,
-                // already guarded + 2 atomicbools (waiting and ready), so it's safe to unrwap here.
+                // there's almost zero chance to deadlock,
+                // already guarded + with 2 atomicbools (awaiting and ready), so it's safe to unrwap here.
                 let mut mtx = mtx.lock().unwrap();
                 let result = mtx.clone();
                 *mtx = Progress::Current(None);
@@ -539,6 +539,7 @@ where
     }
 }
 
+use std::sync::{RwLock, RwLockReadGuard};
 /// Simple (a bit costly) helper thread safe state management,
 ///
 /// using std::sync::Arc and std::sync::RwLock under the hood.

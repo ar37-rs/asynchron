@@ -1,8 +1,5 @@
 use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-use std::{
-    convert::Infallible,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 fn main() {
     let instant: Instant = Instant::now();
@@ -14,7 +11,7 @@ fn main() {
                 let millis = _task.id() + 1;
                 let sleep_dur = Duration::from_millis((10 * millis) as u64);
                 std::thread::sleep(sleep_dur);
-                let result = Ok::<String, Infallible>(format!(
+                let result = Ok::<String, ()>(format!(
                     "The task with id: {} wake up from sleep",
                     _task.id()
                 ));
