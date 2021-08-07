@@ -13,7 +13,7 @@ const TRU: bool = true;
 const FAL: bool = false;
 
 #[derive(Clone)]
-pub struct Channel<C> {
+struct Channel<C> {
     data: Arc<(AtomicBool, Mutex<Option<C>>, Condvar)>,
 }
 
@@ -24,7 +24,7 @@ impl<C: Clone + Send + 'static> Channel<C> {
         }
     }
 
-    pub fn send(&self, t: C) {
+    fn send(&self, t: C) {
         let (ready, mtx, cvar) = &*self.data;
         if let Ok(mut mtx) = mtx.lock() {
             *mtx = Some(t);
@@ -33,20 +33,20 @@ impl<C: Clone + Send + 'static> Channel<C> {
         }
     }
 
-    pub fn try_recv(&self) -> Option<C> {
+    fn try_recv(&self) -> Option<C> {
         let ready = &self.data.0;
         if ready.load(Ordering::Relaxed) {
             let (_, mtx, cvar) = &*self.data;
-            let data = if let Ok(mut mtx) = mtx.lock() {
-                let data = mtx.clone();
+            let result = if let Ok(mut mtx) = mtx.lock() {
+                let result = mtx.clone();
                 *mtx = None;
-                data
+                result
             } else {
                 None
             };
             ready.store(FAL, Ordering::Relaxed);
             cvar.notify_all();
-            data
+            result
         } else {
             None
         }
@@ -513,13 +513,9 @@ where
                 ready.store(FAL, Ordering::SeqCst);
                 self.task_handle.pause.store(FAL, Ordering::Relaxed);
                 let mtx = &self.states.2;
-                let result = if let Ok(mut mtx) = mtx.lock() {
-                    let result = mtx.clone();
-                    *mtx = Progress::Current(None);
-                    result
-                } else {
-                    Progress::Current(None)
-                };
+                let mut mtx = mtx.lock().unwrap();
+                let result = mtx.clone();
+                *mtx = Progress::Current(None);
                 awaiting.store(FAL, Ordering::Relaxed);
                 result
             } else {
