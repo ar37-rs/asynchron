@@ -29,6 +29,7 @@ fn main() {
                     "Something ain't right..., programmer out of bounds.".into(),
                 );
             }
+            
             if _task.is_canceled() {
                 _task.send("Canceling the task".into());
                 return Progress::Canceled;
