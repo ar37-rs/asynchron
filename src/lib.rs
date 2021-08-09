@@ -46,10 +46,9 @@ impl<C: Clone + Send + 'static> Channel<C> {
             };
             ready.store(FAL, Ordering::Relaxed);
             cvar.notify_all();
-            result
-        } else {
-            None
+            return result;
         }
+        None
     }
 }
 
@@ -306,12 +305,12 @@ where
 ///                    "Something ain't right..., programmer out of bounds.".into(),
 ///                );
 ///            }
+///
 ///            if _task.is_canceled() {
 ///                _task.send("Canceling the task".into());
-///                Progress::Canceled
-///            } else {
-///                Progress::Completed(instant.elapsed().subsec_millis())
+///                return Progress::Canceled;
 ///            }
+///            Progress::Completed(instant.elapsed().subsec_millis())
 ///        },
 ///    );
 ///
@@ -525,13 +524,11 @@ where
                 *mtx = Progress::Current(None);
                 ready.store(FAL, Ordering::Relaxed);
                 awaiting.store(FAL, Ordering::Relaxed);
-                result
-            } else {
-                Progress::Current(self.receiver.try_recv())
+                return result;
             }
-        } else {
-            Progress::Current(None)
+            return Progress::Current(self.receiver.try_recv());
         }
+        Progress::Current(None)
     }
 
     /// Try resolve the progress of the task,

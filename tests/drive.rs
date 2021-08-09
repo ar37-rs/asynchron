@@ -11,7 +11,7 @@ fn drive() -> Result<()> {
             }
             let mut counter = 0;
             counter += 1;
-            return Progress::Completed(counter);
+            Progress::Completed(counter)
         },
     );
     task.try_do();
@@ -31,7 +31,7 @@ fn drive() -> Result<()> {
                 }
                 _ => (),
             }
-            
+
             if resolved {
                 println!("sum value: {}\n", sum);
                 assert_eq!(sum, 10);

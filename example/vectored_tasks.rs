@@ -24,13 +24,13 @@ fn main() {
                         "Something ain't right..., programmer out of bounds.".into(),
                     );
                 }
+
                 if _task.is_canceled() {
                     let value = format!("Canceling the task with id: {}", _task.id());
                     _task.send(value);
-                    Progress::Canceled
-                } else {
-                    Progress::Completed(instant.elapsed().subsec_millis())
+                    return Progress::Canceled;
                 }
+                Progress::Completed(instant.elapsed().subsec_millis())
             },
         );
         // Try do the task now.

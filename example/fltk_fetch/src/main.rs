@@ -63,27 +63,29 @@ fn main() -> Result<()> {
                     std::thread::sleep(Duration::from_millis(100))
                 }
 
-                if response.status().is_success() {
-                    let status = response.status().to_string();
+                if !response.status().is_success() {
+                    return  Progress::Error(response.status().to_string());
+                }
 
-                    for _ in 0..5 {
-                        _task.send(status.clone());
-                        std::thread::sleep(Duration::from_millis(100))
+                let status = response.status().to_string();
+                for _ in 0..5 {
+                    // check if the task is canceled.
+                    if _task.is_canceled() {
+                        return Progress::Canceled;
                     }
+                    _task.send(status.clone());
+                    std::thread::sleep(Duration::from_millis(100))
+                }
 
-                    match response.text().await {
-                        Ok(text) => {
-                            // cancel at the end of the tunnel.
-                            if _task.is_canceled() {
-                                return Progress::Canceled;
-                            } else {
-                                return Progress::Completed(text[0..100].to_string());
-                            }
+                match response.text().await {
+                    Ok(text) => {
+                        // and check here also.
+                        if _task.is_canceled() {
+                            return Progress::Canceled;
                         }
-                        Err(e) => return Progress::Error(e.to_string()),
+                        Progress::Completed(text[0..100].to_string())
                     }
-                } else {
-                    return Progress::Error(response.status().to_string());
+                    Err(e) => return Progress::Error(e.to_string()),
                 }
             })
         },
@@ -119,7 +121,7 @@ fn main() -> Result<()> {
                 Progress::Canceled => label = "Request canceled.".to_owned(),
                 Progress::Completed(value) => label = value,
                 Progress::Error(e) => {
-                    eprintln!("error {}", &e);
+                    eprintln!("{}", &e);
                     label = e
                 }
             }

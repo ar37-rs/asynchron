@@ -31,10 +31,9 @@ fn main() {
             }
             if _task.is_canceled() {
                 _task.send("Canceling the task".into());
-                Progress::Canceled
-            } else {
-                Progress::Completed(instant.elapsed().subsec_millis())
+                return Progress::Canceled;
             }
+            Progress::Completed(instant.elapsed().subsec_millis())
         },
     );
 
