@@ -64,7 +64,7 @@ fn main() -> Result<()> {
                 }
 
                 if !response.status().is_success() {
-                    return  Progress::Error(response.status().to_string());
+                    return Progress::Error(response.status().to_string());
                 }
 
                 let status = response.status().to_string();
