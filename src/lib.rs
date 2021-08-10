@@ -4,6 +4,7 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 use std::{
+    borrow::Cow,
     sync::{Arc, Condvar, Mutex},
     thread,
 };
@@ -54,15 +55,15 @@ impl<C: Clone + Send + 'static> Channel<C> {
 
 /// Result for Futurized task,
 ///
-/// where C: type of ITaskHandle sync sender value, T: type of Completed value, E: type of Error value.
+/// where C: type of ITaskHandle sync sender value, T: type of Completed value,
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Progress<C, T, E> {
+pub enum Progress<'a, C, T> {
     /// Current progress of the task
     Current(Option<C>),
     /// Indicates if the task is canceled
     Canceled,
     Completed(T),
-    Error(E),
+    Error(Cow<'a, str>),
 }
 
 /// Resume/Suspend handle of the task.
@@ -128,7 +129,7 @@ impl CancelationHandle {
 #[derive(Clone)]
 pub struct ITaskHandle<C> {
     _id: usize,
-    awaiting: Arc<AtomicBool>,
+    awaiting: Arc<(AtomicBool, AtomicBool)>,
     cancel: Arc<AtomicBool>,
     pause: Arc<AtomicBool>,
     sync_s: Channel<C>,
@@ -175,6 +176,14 @@ impl<C: Clone + Send + 'static> ITaskHandle<C> {
     }
 }
 
+impl<C> Drop for ITaskHandle<C> {
+    fn drop(&mut self) {
+        if thread::panicking() {
+            self.awaiting.1.store(TRU, Ordering::Relaxed)
+        }
+    }
+}
+
 /// Type name of ITaskHandle,
 ///
 /// Use this if there's no needed for sending current value through channel and if type of ITaskHandle sync sender value not necessary to be known.
@@ -182,18 +191,17 @@ pub type InnerTaskHandle = ITaskHandle<()>;
 
 /// Handle of the task.
 #[derive(Clone)]
-pub struct TaskHandle<C, T, E> {
+pub struct TaskHandle<C, T> {
     _id: usize,
-    closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<C, T, E>>,
-    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<C, T, E>>)>,
+    closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<'static, C, T>>,
+    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<'static, C, T>>)>,
     task_handle: ITaskHandle<C>,
 }
 
-impl<C, T, E> TaskHandle<C, T, E>
+impl<C, T> TaskHandle<C, T>
 where
     C: Clone + Send + 'static,
     T: Clone + Send + 'static,
-    E: Clone + Send + 'static,
 {
     /// Get the id of the task
     pub fn id(&self) -> usize {
@@ -211,9 +219,9 @@ where
 
     /// Try (it won't block the current thread) to do the task now,
     ///
-    /// and then try to get the progress from the original task (if the task is in progress).
+    /// and then try to resolve or try to get the progress from the original task (if the task is in progress).
     pub fn try_do(&self) {
-        let waiting = &*self.task_handle.awaiting;
+        let waiting = &self.task_handle.awaiting.0;
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
             self.task_handle.cancel.store(FAL, Ordering::Relaxed);
@@ -272,12 +280,12 @@ where
 
     /// Check if the task is in progress.
     pub fn is_in_progress(&self) -> bool {
-        self.task_handle.awaiting.load(Ordering::Relaxed)
+        self.task_handle.awaiting.0.load(Ordering::Relaxed)
     }
 
     /// Check if the task isn't in progress anymore (done).
     pub fn is_done(&self) -> bool {
-        !self.task_handle.awaiting.load(Ordering::Relaxed)
+        !self.task_handle.awaiting.0.load(Ordering::Relaxed)
     }
 }
 
@@ -286,24 +294,34 @@ where
 ///
 ///```
 ///use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-///use std::time::{Duration, Instant};
+///use std::{
+///    io::Error,
+///    time::{Duration, Instant},
+///};
 ///
 ///fn main() {
 ///    let instant: Instant = Instant::now();
-///    let task: Futurized<String, u32, String> = Futurize::task(
+///    let task: Futurized<String, u32> = Futurize::task(
 ///        0,
-///        move |_task: ITaskHandle<String>| -> Progress<String, u32, String> {
+///        move |_task: ITaskHandle<String>| -> Progress<String, u32> {
+///            // // Panic if need to.
+///            // // will return Error with a message:
+///            // // "the task with id: (specific task id) panicked!"
+///            // std::panic::panic_any("loudness");
 ///            let sleep_dur = Duration::from_millis(10);
 ///            std::thread::sleep(sleep_dur);
-///            // Send current task progress.
-///            let result = Ok::<String, ()>("The task  wake up from sleep.".into());
-///            if let Ok(value) = result {
-///                _task.send(value);
-///            } else {
-///                // return error immediately if something not right, for example:
-///                return Progress::Error(
-///                    "Something ain't right..., programmer out of bounds.".into(),
-///                );
+///            let result = Ok::<String, Error>(
+///                format!("The task with id: {} wake up from sleep", _task.id()).into(),
+///            );
+///            match result {
+///                Ok(value) => {
+///                    // Send current task progress.
+///                    _task.send(value)
+///                }
+///                Err(e) => {
+///                    // Return error immediately if something not right, for example:
+///                    return Progress::Error(e.to_string().into());
+///                }
 ///            }
 ///
 ///            if _task.is_canceled() {
@@ -319,7 +337,7 @@ where
 ///
 ///    let mut exit = false;
 ///    loop {
-///        task.try_resolve(|progress, resolved| {
+///        task.try_resolve(|progress, done| {
 ///            match progress {
 ///                Progress::Current(task_receiver) => {
 ///                    if let Some(value) = task_receiver {
@@ -339,7 +357,7 @@ where
 ///                }
 ///            }
 ///
-///            if resolved {
+///            if done {
 ///                // This scope act like "finally block", do final things here.
 ///                exit = true
 ///            }
@@ -351,15 +369,15 @@ where
 ///    }
 ///}
 ///```
-pub struct Futurize<C, T, E> {
-    _data: PhantomData<(C, T, E)>,
+pub struct Futurize<C, T> {
+    _data: PhantomData<(C, T)>,
 }
 
-impl<C: Clone + Send + 'static, T, E> Futurize<C, T, E> {
+impl<C: Clone + Send + 'static, T> Futurize<C, T> {
     /// Create new task.
-    pub fn task<F>(id: usize, f: F) -> Futurized<C, T, E>
+    pub fn task<F>(id: usize, f: F) -> Futurized<C, T>
     where
-        F: Send + Sync + 'static + Fn(ITaskHandle<C>) -> Progress<C, T, E>,
+        F: Send + Sync + 'static + Fn(ITaskHandle<C>) -> Progress<'static, C, T>,
     {
         let _channel = Channel::<C>::init();
         Futurized {
@@ -373,7 +391,7 @@ impl<C: Clone + Send + 'static, T, E> Futurize<C, T, E> {
             receiver: _channel.clone(),
             task_handle: ITaskHandle {
                 _id: id,
-                awaiting: Arc::new(AtomicBool::new(FAL)),
+                awaiting: Arc::new((AtomicBool::new(FAL), AtomicBool::new(FAL))),
                 cancel: Arc::new(AtomicBool::new(FAL)),
                 pause: Arc::new(AtomicBool::new(FAL)),
                 sync_s: _channel,
@@ -384,19 +402,18 @@ impl<C: Clone + Send + 'static, T, E> Futurize<C, T, E> {
 
 /// Futurized task.
 #[derive(Clone)]
-pub struct Futurized<C, T, E> {
+pub struct Futurized<C, T> {
     _id: usize,
-    closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<C, T, E>>,
-    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<C, T, E>>)>,
+    closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<'static, C, T>>,
+    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<'static, C, T>>)>,
     receiver: Channel<C>,
     task_handle: ITaskHandle<C>,
 }
 
-impl<C, T, E> Futurized<C, T, E>
+impl<C, T> Futurized<C, T>
 where
     C: Clone + Send + 'static,
     T: Clone + Send + 'static,
-    E: Clone + Send + 'static,
 {
     /// Set stack size (in bytes) of the thread for spawning Futurized task,
     ///
@@ -409,9 +426,9 @@ where
 
     /// Try (it won't block the current thread) to do the task now,
     ///
-    /// and then try to get the progress (if the task is in progress).
+    /// and then try to resolve or try to get the progress (if the task is in progress).
     pub fn try_do(&self) {
-        let waiting = &*self.task_handle.awaiting;
+        let waiting = &self.task_handle.awaiting.0;
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
             self.task_handle.cancel.store(FAL, Ordering::Relaxed);
@@ -473,7 +490,7 @@ where
     /// 'recommended' if only intended to try to do the task, check progress of the task or task cancelation,
     ///
     /// from inside moving closures or from other threads to avoid (channel) synchronous Sender data races.
-    pub fn handle(&self) -> TaskHandle<C, T, E> {
+    pub fn handle(&self) -> TaskHandle<C, T> {
         TaskHandle {
             _id: self._id,
             closure: self.closure.clone(),
@@ -510,8 +527,15 @@ where
     /// Try to get the progress of the task, it won't block current thread (non-blocking).
     ///
     /// WARNING! to prevent from data races this fn should be called once at a time.
-    pub fn try_get(&self) -> Progress<C, T, E> {
-        let awaiting = &*self.task_handle.awaiting;
+    pub fn try_get(&self) -> Progress<C, T> {
+        let (awaiting, task_panicked) = &*self.task_handle.awaiting;
+        if task_panicked.load(Ordering::Relaxed) {
+            task_panicked.store(FAL, Ordering::Relaxed);
+            awaiting.store(FAL, Ordering::Relaxed);
+            // fixes unsound problem, return error immediately if the task is panicked.
+            return Progress::Error(format!("the task with id: {} panicked!", self._id).into());
+        }
+
         if awaiting.load(Ordering::Relaxed) {
             let ready = &self.states.0;
             if ready.load(Ordering::Relaxed) {
@@ -543,23 +567,23 @@ where
     ///```
     /// WARNING! to prevent from data races this fn should be called once at a time.
     #[inline]
-    pub fn try_resolve<F: FnOnce(Progress<C, T, E>, bool) -> ()>(&self, f: F) {
-        if self.task_handle.awaiting.load(Ordering::Relaxed) {
+    pub fn try_resolve<F: FnOnce(Progress<C, T>, bool) -> ()>(&self, f: F) {
+        if self.task_handle.awaiting.0.load(Ordering::Relaxed) {
             f(
                 self.try_get(),
-                !self.task_handle.awaiting.load(Ordering::Relaxed),
+                !self.task_handle.awaiting.0.load(Ordering::Relaxed),
             )
         }
     }
 
     /// Check if the task is in progress.
     pub fn is_in_progress(&self) -> bool {
-        self.task_handle.awaiting.load(Ordering::Relaxed)
+        self.task_handle.awaiting.0.load(Ordering::Relaxed)
     }
 
     /// Check if the task isn't in progress anymore (done).
     pub fn is_done(&self) -> bool {
-        !self.task_handle.awaiting.load(Ordering::Relaxed)
+        !self.task_handle.awaiting.0.load(Ordering::Relaxed)
     }
 }
 

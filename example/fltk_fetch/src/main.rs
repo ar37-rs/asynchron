@@ -32,11 +32,11 @@ fn main() -> Result<()> {
 
     let reqwest = Futurize::task(
         0,
-        move |_task: ITaskHandle<String>| -> Progress<String, String, String> {
+        move |_task: ITaskHandle<String>| -> Progress<String, String> {
             // Builder::new_current_thread().enable_all().build() also working fine on this context.
             let rt = match Builder::new_multi_thread().enable_all().build() {
                 Ok(rt) => rt,
-                Err(e) => return Progress::Error(e.to_string()),
+                Err(e) => return Progress::Error(e.to_string().into()),
             };
 
             rt.block_on(async {
@@ -44,18 +44,18 @@ fn main() -> Result<()> {
                 let time_out = Duration::from_secs(10);
                 let client = match Client::builder().timeout(time_out).build() {
                     Ok(client) => client,
-                    Err(e) => return Progress::Error(e.to_string()),
+                    Err(e) => return Progress::Error(e.to_string().into()),
                 };
 
                 let url = *_url.get();
                 let request = match client.get(url).build() {
                     Ok(request) => request,
-                    Err(e) => return Progress::Error(e.to_string()),
+                    Err(e) => return Progress::Error(e.to_string().into()),
                 };
 
                 let response = match client.execute(request).await {
                     Ok(response) => response,
-                    Err(e) => return Progress::Error(e.to_string()),
+                    Err(e) => return Progress::Error(e.to_string().into()),
                 };
 
                 for i in 0..5 {
@@ -64,7 +64,7 @@ fn main() -> Result<()> {
                 }
 
                 if !response.status().is_success() {
-                    return Progress::Error(response.status().to_string());
+                    return Progress::Error(response.status().to_string().into());
                 }
 
                 let status = response.status().to_string();
@@ -85,7 +85,7 @@ fn main() -> Result<()> {
                         }
                         Progress::Completed(text[0..100].to_string())
                     }
-                    Err(e) => return Progress::Error(e.to_string()),
+                    Err(e) => return Progress::Error(e.to_string().into()),
                 }
             })
         },
@@ -110,7 +110,7 @@ fn main() -> Result<()> {
 
     while app.wait() {
         std::thread::sleep(Duration::from_millis(10));
-        reqwest.try_resolve(|progress, resolved| {
+        reqwest.try_resolve(|progress, done| {
             match progress {
                 Progress::Current(task_receiver) => {
                     button_fetch.set_label("Fetching...");
@@ -122,11 +122,11 @@ fn main() -> Result<()> {
                 Progress::Completed(value) => label = value,
                 Progress::Error(e) => {
                     eprintln!("{}", &e);
-                    label = e
+                    label = e.into()
                 }
             }
             
-            if resolved {
+            if done {
                 text_frame.set_label(&label);
                 button_fetch.set_label("Fetch")
             }

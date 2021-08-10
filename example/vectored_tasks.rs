@@ -1,28 +1,37 @@
 use asynchron::{Futurize, Futurized, ITaskHandle, Progress};
-use std::time::{Duration, Instant};
+use std::{
+    io::Error,
+    time::{Duration, Instant},
+};
 
 fn main() {
     let instant: Instant = Instant::now();
     let mut vec_opt_tasks = Vec::new();
     for i in 0..5 {
-        let task: Futurized<String, u32, String> = Futurize::task(
+        let task: Futurized<String, u32> = Futurize::task(
             i,
-            move |_task: ITaskHandle<String>| -> Progress<String, u32, String> {
+            move |_task: ITaskHandle<String>| -> Progress<String, u32> {
+                // // Panic if need to.
+                // // will return Error with a message:
+                // // "the task with id: (specific task id) panicked!"
+                // if _task.id() == 3 {
+                //    std::panic::panic_any("loudness")
+                // }
                 let millis = _task.id() + 1;
                 let sleep_dur = Duration::from_millis((10 * millis) as u64);
                 std::thread::sleep(sleep_dur);
-                let result = Ok::<String, ()>(format!(
-                    "The task with id: {} wake up from sleep",
-                    _task.id()
-                ));
-                // Send current task progress.
-                if let Ok(value) = result {
-                    _task.send(value);
-                } else {
-                    // return error immediately if something not right, for example:
-                    return Progress::Error(
-                        "Something ain't right..., programmer out of bounds.".into(),
-                    );
+                let result = Ok::<String, Error>(
+                    format!("The task with id: {} wake up from sleep", _task.id()).into(),
+                );
+                match result {
+                    Ok(value) => {
+                        // Send current task progress.
+                        _task.send(value)
+                    }
+                    Err(e) => {
+                        // Return error immediately if something not right, for example:
+                        return Progress::Error(e.to_string().into());
+                    }
                 }
 
                 if _task.is_canceled() {
@@ -54,7 +63,7 @@ fn main() {
                         //     task.cancel()
                         // }
 
-                        // // or terminate if need to.
+                        // terminate if need to.
                         // // change the line above like so: "if let Some(task) = vec_opt_tasks[i].clone() {..."
                         // // and then simply set some items of vec_opt_tasks to None.
                         // if (task.id() % 2 != 0) || (task.id() == 0) {
