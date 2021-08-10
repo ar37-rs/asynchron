@@ -92,7 +92,7 @@ fn main() -> Result<()> {
     );
 
     let reqwest_fetch = reqwest.handle();
-    let reqwest_cancel = reqwest.cancelation_handle();
+    let reqwest_cancel = reqwest.rt_handle();
 
     button_fetch.set_callback(move |_| reqwest_fetch.try_do());
 

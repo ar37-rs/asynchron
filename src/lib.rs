@@ -66,14 +66,14 @@ pub enum Progress<'a, C, T> {
     Error(Cow<'a, str>),
 }
 
-/// Resume/Suspend handle of the task.
+/// Runtime handle of the task.
 #[derive(Clone)]
-pub struct RespendHandle {
+pub struct RuntimeHandle {
     _id: usize,
-    pause: Arc<AtomicBool>,
+    cancel_pause: Arc<(AtomicBool, AtomicBool)>,
 }
 
-impl RespendHandle {
+impl RuntimeHandle {
     /// Get the id of the task
     pub fn id(&self) -> usize {
         self._id
@@ -83,43 +83,34 @@ impl RespendHandle {
     ///
     /// this won't do anything if not explicitly configured inside the task.
     pub fn suspend(&self) {
-        self.pause.store(TRU, Ordering::Relaxed)
+        self.cancel_pause.1.store(TRU, Ordering::Relaxed)
     }
 
     /// Resume the suspended task.
     pub fn resume(&self) {
-        self.pause.store(FAL, Ordering::Relaxed)
+        self.cancel_pause.1.store(FAL, Ordering::Relaxed)
+    }
+
+    /// Check if progress of the task is resumed.
+    pub fn is_resumed(&self) -> bool {
+        !self.cancel_pause.1.load(Ordering::Relaxed)
     }
 
     /// Check if progress of the task is suspended.
     pub fn is_suspended(&self) -> bool {
-        self.pause.load(Ordering::Relaxed)
-    }
-}
-
-/// Cancelation handle of the task.
-#[derive(Clone)]
-pub struct CancelationHandle {
-    _id: usize,
-    cancel: Arc<AtomicBool>,
-}
-
-impl CancelationHandle {
-    /// Get the id of the task
-    pub fn id(&self) -> usize {
-        self._id
+        self.cancel_pause.1.load(Ordering::Relaxed)
     }
 
     /// Send signal to the inner task handle that the task should be canceled.
     ///
     /// this won't do anything if not explicitly configured inside the task.
     pub fn cancel(&self) {
-        self.cancel.store(TRU, Ordering::Relaxed)
+        self.cancel_pause.0.store(TRU, Ordering::Relaxed)
     }
 
     /// Check if progress of the task is canceled.
     pub fn is_canceled(&self) -> bool {
-        self.cancel.load(Ordering::Relaxed)
+        self.cancel_pause.0.load(Ordering::Relaxed)
     }
 }
 
@@ -130,8 +121,7 @@ impl CancelationHandle {
 pub struct ITaskHandle<C> {
     _id: usize,
     awaiting: Arc<(AtomicBool, AtomicBool)>,
-    cancel: Arc<AtomicBool>,
-    pause: Arc<AtomicBool>,
+    cancel_pause: Arc<(AtomicBool, AtomicBool)>,
     sync_s: Channel<C>,
 }
 
@@ -148,12 +138,12 @@ impl<C: Clone + Send + 'static> ITaskHandle<C> {
 
     /// Suspend the task (it's quite rare that suspending task from inside itself, unless in a particular case).
     pub fn suspend(&self) {
-        self.pause.store(TRU, Ordering::Relaxed)
+        self.cancel_pause.1.store(TRU, Ordering::Relaxed)
     }
 
     /// Resume the task (it's quite rare that resuming task from inside itself, unless in a particular case).
     pub fn resume(&self) {
-        self.pause.store(FAL, Ordering::Relaxed)
+        self.cancel_pause.1.store(FAL, Ordering::Relaxed)
     }
 
     /// Check if progress of the task should be suspended,
@@ -162,17 +152,22 @@ impl<C: Clone + Send + 'static> ITaskHandle<C> {
     ///
     /// do other things (switch) while the task is suspended.
     pub fn is_suspended(&self) -> bool {
-        self.pause.load(Ordering::Relaxed)
+        self.cancel_pause.1.load(Ordering::Relaxed)
+    }
+
+    /// Check if progress of the task is resumed.
+    pub fn is_resumed(&self) -> bool {
+        !self.cancel_pause.1.load(Ordering::Relaxed)
     }
 
     /// Cancel the task (it's quite rare that canceling task from inside itself, unless in a particular case).
     pub fn cancel(&self) {
-        self.cancel.store(TRU, Ordering::Relaxed)
+        self.cancel_pause.0.store(TRU, Ordering::Relaxed)
     }
 
     /// Check if progress of the task should be canceled.
     pub fn is_canceled(&self) -> bool {
-        self.cancel.load(Ordering::Relaxed)
+        self.cancel_pause.0.load(Ordering::Relaxed)
     }
 }
 
@@ -193,8 +188,12 @@ pub type InnerTaskHandle = ITaskHandle<()>;
 #[derive(Clone)]
 pub struct TaskHandle<C, T> {
     _id: usize,
-    closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<'static, C, T>>,
-    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<'static, C, T>>)>,
+    states: Arc<(
+        AtomicBool,
+        AtomicUsize,
+        Mutex<Progress<'static, C, T>>,
+        Box<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<'static, C, T>>,
+    )>,
     task_handle: ITaskHandle<C>,
 }
 
@@ -224,13 +223,15 @@ where
         let waiting = &self.task_handle.awaiting.0;
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
-            self.task_handle.cancel.store(FAL, Ordering::Relaxed);
+            self.task_handle
+                .cancel_pause
+                .0
+                .store(FAL, Ordering::Relaxed);
             let _stack_size = self.states.1.load(Ordering::Relaxed);
             let states = Arc::clone(&self.states);
-            let closure = Arc::clone(&self.closure);
             let inner_task_handle = self.task_handle.clone();
             let task = move || {
-                let (ready, _, mtx) = &*states;
+                let (ready, _, mtx, closure) = &*states;
                 let result = closure(inner_task_handle);
                 if let Ok(mut mtx) = mtx.lock() {
                     *mtx = result;
@@ -253,29 +254,43 @@ where
     ///
     /// this won't do anything if not explicitly configured inside the task.
     pub fn suspend(&self) {
-        self.task_handle.pause.store(TRU, Ordering::Relaxed)
+        self.task_handle
+            .cancel_pause
+            .1
+            .store(TRU, Ordering::Relaxed)
     }
 
     /// Resume the suspended task.
     pub fn resume(&self) {
-        self.task_handle.pause.store(FAL, Ordering::Relaxed)
+        self.task_handle
+            .cancel_pause
+            .1
+            .store(FAL, Ordering::Relaxed)
     }
 
     /// Check if progress of the task is suspended.
     pub fn is_suspended(&self) -> bool {
-        self.task_handle.pause.load(Ordering::Relaxed)
+        self.task_handle.cancel_pause.1.load(Ordering::Relaxed)
+    }
+
+    /// Check if progress of the task is resumed.
+    pub fn is_resumed(&self) -> bool {
+        !self.task_handle.cancel_pause.1.load(Ordering::Relaxed)
     }
 
     /// Send signal to the inner task handle that the task should be canceled.
     ///
     /// this won't do anything if not explicitly configured inside the task.
     pub fn cancel(&self) {
-        self.task_handle.cancel.store(TRU, Ordering::Relaxed)
+        self.task_handle
+            .cancel_pause
+            .0
+            .store(TRU, Ordering::Relaxed)
     }
 
     /// Check if progress of the task is canceled.
     pub fn is_canceled(&self) -> bool {
-        self.task_handle.cancel.load(Ordering::Relaxed)
+        self.task_handle.cancel_pause.0.load(Ordering::Relaxed)
     }
 
     /// Check if the task is in progress.
@@ -382,18 +397,17 @@ impl<C: Clone + Send + 'static, T> Futurize<C, T> {
         let _channel = Channel::<C>::init();
         Futurized {
             _id: id,
-            closure: Arc::new(f),
             states: Arc::new((
                 AtomicBool::new(FAL),
                 AtomicUsize::new(ZER),
                 Mutex::new(Progress::Current(None)),
+                Box::new(f),
             )),
             receiver: _channel.clone(),
             task_handle: ITaskHandle {
                 _id: id,
                 awaiting: Arc::new((AtomicBool::new(FAL), AtomicBool::new(FAL))),
-                cancel: Arc::new(AtomicBool::new(FAL)),
-                pause: Arc::new(AtomicBool::new(FAL)),
+                cancel_pause: Arc::new((AtomicBool::new(FAL), AtomicBool::new(FAL))),
                 sync_s: _channel,
             },
         }
@@ -404,8 +418,12 @@ impl<C: Clone + Send + 'static, T> Futurize<C, T> {
 #[derive(Clone)]
 pub struct Futurized<C, T> {
     _id: usize,
-    closure: Arc<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<'static, C, T>>,
-    states: Arc<(AtomicBool, AtomicUsize, Mutex<Progress<'static, C, T>>)>,
+    states: Arc<(
+        AtomicBool,
+        AtomicUsize,
+        Mutex<Progress<'static, C, T>>,
+        Box<dyn Send + Sync + Fn(ITaskHandle<C>) -> Progress<'static, C, T>>,
+    )>,
     receiver: Channel<C>,
     task_handle: ITaskHandle<C>,
 }
@@ -431,14 +449,16 @@ where
         let waiting = &self.task_handle.awaiting.0;
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
-            self.task_handle.cancel.store(FAL, Ordering::Relaxed);
+            self.task_handle
+                .cancel_pause
+                .0
+                .store(FAL, Ordering::Relaxed);
             let _stack_size = self.states.1.load(Ordering::Relaxed);
             let states = Arc::clone(&self.states);
-            let closure = Arc::clone(&self.closure);
-            let task_handle = self.task_handle.clone();
+            let inner_task_handle = self.task_handle.clone();
             let task = move || {
-                let (ready, _, mtx) = &*states;
-                let result = closure(task_handle);
+                let (ready, _, mtx, closure) = &*states;
+                let result = closure(inner_task_handle);
                 if let Ok(mut mtx) = mtx.lock() {
                     *mtx = result;
                 }
@@ -460,62 +480,67 @@ where
     ///
     /// this won't do anything if not explicitly configured inside the task.
     pub fn suspend(&self) {
-        self.task_handle.pause.store(TRU, Ordering::Relaxed)
+        self.task_handle
+            .cancel_pause
+            .1
+            .store(TRU, Ordering::Relaxed)
     }
 
     /// Resume the suspended task.
     pub fn resume(&self) {
-        self.task_handle.pause.store(FAL, Ordering::Relaxed)
+        self.task_handle
+            .cancel_pause
+            .1
+            .store(FAL, Ordering::Relaxed)
     }
 
     /// Check if progress of the task is suspended.
     pub fn is_suspended(&self) -> bool {
-        self.task_handle.pause.load(Ordering::Relaxed)
+        self.task_handle.cancel_pause.1.load(Ordering::Relaxed)
+    }
+
+    /// Check if progress of the task is resumed.
+    pub fn is_resumed(&self) -> bool {
+        !self.task_handle.cancel_pause.1.load(Ordering::Relaxed)
     }
 
     /// Send signal to the inner task handle that the task should be canceled.
     ///
     /// this won't do anything if not explicitly configured inside the task.
     pub fn cancel(&self) {
-        self.task_handle.cancel.store(TRU, Ordering::Relaxed)
+        self.task_handle
+            .cancel_pause
+            .0
+            .store(TRU, Ordering::Relaxed)
     }
 
     /// Check if progress of the task is canceled.
     pub fn is_canceled(&self) -> bool {
-        self.task_handle.is_canceled()
+        self.task_handle.cancel_pause.0.load(Ordering::Relaxed)
     }
 
-    /// Get task handle,
+    /// Get the task handle, if only intended to try to do,
     ///
-    /// 'recommended' if only intended to try to do the task, check progress of the task or task cancelation,
+    /// check progress, cancel, suspend or resume the task, from inside moving closures,
     ///
-    /// from inside moving closures or from other threads to avoid (channel) synchronous Sender data races.
+    /// or from other threads to avoid (channel) synchronous Sender data races.
     pub fn handle(&self) -> TaskHandle<C, T> {
         TaskHandle {
             _id: self._id,
-            closure: self.closure.clone(),
             states: self.states.clone(),
             task_handle: self.task_handle.clone(),
         }
     }
 
-    /// Get cancelation handle, use this to avoid unnecessary cloning unused task values,
+    /// Get the runtime handle, if only intended to cancel,
     ///
-    /// 'recommended' if only intended to cancel the task from inside moving closures or from other threads.
-    pub fn cancelation_handle(&self) -> CancelationHandle {
-        CancelationHandle {
-            _id: self._id,
-            cancel: self.task_handle.cancel.clone(),
-        }
-    }
-
-    /// Get resume/suspend handle, use this to avoid unnecessary cloning unused task values,
+    /// suspend or resume the task from inside moving closures or from other threads.
     ///
-    /// 'recommended' if only intended to resume or suspend the task from inside moving closures or from other threads.
-    pub fn respend_handle(&self) -> RespendHandle {
-        RespendHandle {
+    /// use this to avoid unnecessary cloning unused task values.
+    pub fn rt_handle(&self) -> RuntimeHandle {
+        RuntimeHandle {
             _id: self._id,
-            pause: self.task_handle.pause.clone(),
+            cancel_pause: self.task_handle.cancel_pause.clone(),
         }
     }
 
@@ -530,6 +555,10 @@ where
     pub fn try_get(&self) -> Progress<C, T> {
         let (awaiting, task_panicked) = &*self.task_handle.awaiting;
         if task_panicked.load(Ordering::Relaxed) {
+            self.task_handle
+                .cancel_pause
+                .1
+                .store(FAL, Ordering::Relaxed);
             task_panicked.store(FAL, Ordering::Relaxed);
             awaiting.store(FAL, Ordering::Relaxed);
             // fixes unsound problem, return error immediately if the task is panicked.
@@ -539,7 +568,10 @@ where
         if awaiting.load(Ordering::Relaxed) {
             let ready = &self.states.0;
             if ready.load(Ordering::Relaxed) {
-                self.task_handle.pause.store(FAL, Ordering::Relaxed);
+                self.task_handle
+                    .cancel_pause
+                    .1
+                    .store(FAL, Ordering::Relaxed);
                 let mtx = &self.states.2;
                 // there's almost zero chance to deadlock,
                 // already guarded + with 2 atomicbools (awaiting and ready), so it's safe to unwrap here.
