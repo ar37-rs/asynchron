@@ -7,8 +7,8 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# asynchron = "0.6"
-asynchron = { path = "../../../asynchron" }
+asynchron = "0.7"
+# asynchron = { path = "../../../asynchron" }
 fltk = { version = "1" }
 reqwest = "0.11"
 tokio = { version = "1", features = ["rt-multi-thread"] }
