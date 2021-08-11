@@ -47,7 +47,11 @@ fn main() -> Result<()> {
                     Err(e) => return Progress::Error(e.to_string().into()),
                 };
 
-                let url = *_url.get();
+                let url = match _url.get() {
+                    Ok(url) => *url,
+                    Err(e) => return Progress::Error(e.to_string().into()),
+                };
+
                 let request = match client.get(url).build() {
                     Ok(request) => request,
                     Err(e) => return Progress::Error(e.to_string().into()),
