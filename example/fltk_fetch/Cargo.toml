@@ -1,6 +1,6 @@
 [package]
 name = "fltk_fetch"
-version = "0.7.6"
+version = "0.7.7"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 edition = "2018"
 publish = false
