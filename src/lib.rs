@@ -586,10 +586,12 @@ where
     }
 }
 
-use std::sync::{LockResult, MutexGuard};
-/// Simple helper thread safe state management,
+/// Tricky oneshot thread safe state management
 ///
-/// using std::sync::Arc and std::sync::Mutex under the hood.
+/// WARNING!
+/// (if not sure how to use it, don't use it)
+///
+/// using std::sync::Arc, std::sync::Mutex and core::option::Option under the hood.
 ///
 /// # Example:
 ///
@@ -599,49 +601,86 @@ use std::sync::{LockResult, MutexGuard};
 ///fn main() -> core::result::Result<(), Box<dyn std::error::Error>> {
 ///    let state: SyncState<i32> = SyncState::new(0);
 ///    let _state = state.clone();
+///    
+///    // The state will be empty if it successfully loaded.
+///    match state.load() {
+///        Some(value) => {
+///            println!("initial value: {:?}", value)
+///        }
+///        _ => (),
+///    }
+///    
+///    assert_eq!(true, state.is_empty());
 ///
-///    if let Err(_) = std::thread::spawn(move||{
-///        _state.set(20);
+///    if let Err(_) = std::thread::spawn(move || {
+///        if _state.is_empty() {
+///            // Restore the state.
+///            _state.store(20)
+///        }
 ///    })
-///     .join()
+///    .join()
 ///    {
-///        let e = std::io::Error::new(std::io::ErrorKind::Other, "Unable to join thread.");
+///        let e = std::io::Error::new(std::io::ErrorKind::Other, "Unable to join the thread.");
 ///        return Err(Box::new(e));
 ///    }
 ///
-///    if let Ok(value) = state.get() {
-///       println!("{:?}", *value);
-///    } else {
-///       let e = std::io::Error::new(std::io::ErrorKind::Other, "Mutex poisonous!");
-///       return Err(Box::new(e));
+///    if state.is_full() {
+///        match state.load() {
+///            Some(value) => {
+///                assert_eq!(value, 20);
+///                println!("latest value {:?}", value)
+///            }
+///            _ => {
+///                let e = std::io::Error::new(std::io::ErrorKind::Other, "State not restore.");
+///                return Err(Box::new(e));
+///            }
+///        }
 ///    }
+///    
+///    assert_eq!(true, state.is_empty());
+///    
 ///    Ok(())
 ///}
 ///```
 #[derive(Clone)]
 pub struct SyncState<T> {
-    item: Arc<Mutex<T>>,
+    item: Arc<(Mutex<Option<T>>, AtomicBool)>,
 }
 
 impl<T: Clone + Send + Sync + ?Sized> SyncState<T> {
     /// Create new state.
     pub fn new(t: T) -> SyncState<T> {
         SyncState {
-            item: Arc::new(Mutex::new(t)),
+            item: Arc::new((Mutex::new(Some(t)), AtomicBool::new(FAL))),
         }
     }
 
-    /// Get state.
-    pub fn get(&self) -> LockResult<MutexGuard<'_, T>> {
-        let rwx = &*self.item;
-        rwx.lock()
+    /// Load new value from the state.
+    pub fn load(&self) -> Option<T> {
+        if let Ok(mut mtx) = self.item.0.lock() {
+            let result = Clone::clone(&*mtx);
+            *mtx = None;
+            self.item.1.store(TRU, Ordering::Relaxed);
+            return result;
+        }
+        None
     }
 
-    /// Set state.
-    pub fn set(&self, t: T) {
-        let rwx = &*self.item;
-        if let Ok(mut rwx) = rwx.lock() {
-            *rwx = t
+    /// Store new value to the state
+    pub fn store(&self, t: T) {
+        if let Ok(mut value) = self.item.0.lock() {
+            *value = Some(t);
+            self.item.1.store(FAL, Ordering::Relaxed)
         }
+    }
+
+    /// Check if the state isn't full (if it isn't full, just store it).
+    pub fn is_empty(&self) -> bool {
+        self.item.1.load(Ordering::Relaxed)
+    }
+
+    /// Check if the state isn't empty (if it isn't empty, just load it).
+    pub fn is_full(&self) -> bool {
+        !self.item.1.load(Ordering::Relaxed)
     }
 }

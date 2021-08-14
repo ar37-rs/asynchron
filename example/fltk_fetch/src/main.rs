@@ -13,7 +13,8 @@ fn main() -> Result<()> {
     timer_frame.set_pos(0, 0);
     timer_frame.set_size(400, 100);
 
-    let mut text_frame = Frame::default().with_label("Try hit Fetch button and let's see what happens...");
+    let mut text_frame =
+        Frame::default().with_label("Try hit Fetch button and let's see what happens...");
     text_frame.set_pos(100, 60);
     text_frame.set_size(200, 200);
 
@@ -47,9 +48,9 @@ fn main() -> Result<()> {
                     Err(e) => return Progress::Error(e.to_string().into()),
                 };
 
-                let url = match _url.get() {
-                    Ok(url) => *url,
-                    Err(e) => return Progress::Error(e.to_string().into()),
+                let url = match _url.load() {
+                    Some(url) => url,
+                   _ => return Progress::Error("Unable to load URL, probably empty.".into()),
                 };
 
                 let request = match client.get(url).build() {
@@ -129,17 +130,21 @@ fn main() -> Result<()> {
                     label = e.into()
                 }
             }
-            
+
             if done {
                 text_frame.set_label(&label);
                 button_fetch.set_label("Fetch")
             }
         });
 
-        if timer % 2 == 0 {
-            url.set("https://hyper.rs")
-        } else {
-            url.set("https://www.rust-lang.org")
+        if url.is_empty() {
+            let value = if timer % 2 == 0 {
+                "https://hyper.rs"
+            } else {
+                "https://www.rust-lang.org"
+            };
+            url.store(value);
+            println!("url restored.");
         }
 
         timer += 1;
