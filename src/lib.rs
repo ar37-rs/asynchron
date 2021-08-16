@@ -41,10 +41,10 @@ impl<'a, C: Debug, T: Debug> Debug for Progress<'a, C, T> {
 impl<'a, C: Clone, T: Clone> Clone for Progress<'a, C, T> {
     fn clone(&self) -> Self {
         match self {
-            Self::Current(val) => Self::Current(Clone::clone(&val)),
+            Self::Current(val) => Self::Current(Clone::clone(val)),
             Self::Canceled => Self::Canceled,
-            Self::Completed(val) => Self::Completed(Clone::clone(&val)),
-            Self::Error(val) => Self::Error(Clone::clone(&val)),
+            Self::Completed(val) => Self::Completed(Clone::clone(val)),
+            Self::Error(val) => Self::Error(Clone::clone(val)),
         }
     }
 }
