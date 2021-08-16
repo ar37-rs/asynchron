@@ -482,7 +482,7 @@ where
         if !waiting.load(Ordering::SeqCst) {
             waiting.store(TRU, Ordering::SeqCst);
             let _self = self;
-            _self.rt_states.3.store(FAL, Ordering::Relaxed);
+            _self.rt_states.2.store(FAL, Ordering::Relaxed);
             let _stack_size = _self.states.3.load(Ordering::Relaxed);
             let states = Arc::clone(&_self.states);
             let inner_task_handle = ITaskHandle {
