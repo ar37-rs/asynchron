@@ -1,6 +1,7 @@
 #![deny(unsafe_code)]
 use core::{
     clone::Clone,
+    fmt::{Debug, Formatter},
     marker::PhantomData,
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
@@ -17,7 +18,6 @@ const FAL: bool = false;
 /// Result for Futurized task,
 ///
 /// where C: type of ITaskHandle sync sender value, T: type of Completed value,
-#[derive(Clone, Debug)]
 pub enum Progress<'a, C, T> {
     /// Current progress of the task
     Current(Option<C>),
@@ -27,11 +27,42 @@ pub enum Progress<'a, C, T> {
     Error(Cow<'a, str>),
 }
 
+impl<'a, C: Debug, T: Debug> Debug for Progress<'a, C, T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Current(val) => write!(f, "Current: {:?}", val),
+            Self::Canceled => write!(f, "Canceled"),
+            Self::Completed(val) => write!(f, "Completed: {:?}", val),
+            Self::Error(val) => write!(f, "Error: {}", val),
+        }
+    }
+}
+
+impl<'a, C: Clone, T: Clone> Clone for Progress<'a, C, T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Current(val) => Self::Current(Clone::clone(&val)),
+            Self::Canceled => Self::Canceled,
+            Self::Completed(val) => Self::Completed(Clone::clone(&val)),
+            Self::Error(val) => Self::Error(Clone::clone(&val)),
+        }
+    }
+}
+
 /// Runtime handle of the task.
-#[derive(Clone)]
 pub struct RuntimeHandle {
     _id: usize,
     rt_states: Arc<(AtomicBool, AtomicBool, AtomicBool, AtomicBool)>,
+}
+
+impl Clone for RuntimeHandle {
+    fn clone(&self) -> Self {
+        let _self = self;
+        Self {
+            _id: _self._id,
+            rt_states: Arc::clone(&_self.rt_states),
+        }
+    }
 }
 
 impl RuntimeHandle {
@@ -88,11 +119,21 @@ impl RuntimeHandle {
 /// Inner handle of the task,
 ///
 /// where C: type of sync sender value.
-#[derive(Clone)]
 pub struct ITaskHandle<C> {
     _id: usize,
     rt_states: Arc<(AtomicBool, AtomicBool, AtomicBool, AtomicBool)>,
     sync_s: Arc<(AtomicBool, Mutex<Option<C>>, Condvar)>,
+}
+
+impl<C> Clone for ITaskHandle<C> {
+    fn clone(&self) -> Self {
+        let _self = self;
+        Self {
+            _id: _self._id,
+            rt_states: Arc::clone(&_self.rt_states),
+            sync_s: Arc::clone(&_self.sync_s),
+        }
+    }
 }
 
 impl<C: Clone + Send + 'static> ITaskHandle<C> {
@@ -161,7 +202,6 @@ impl<C> Drop for ITaskHandle<C> {
 pub type InnerTaskHandle = ITaskHandle<()>;
 
 /// Handle of the task.
-#[derive(Clone)]
 pub struct TaskHandle<C, T> {
     _id: usize,
     states: Arc<(
@@ -172,6 +212,18 @@ pub struct TaskHandle<C, T> {
     )>,
     rt_states: Arc<(AtomicBool, AtomicBool, AtomicBool, AtomicBool)>,
     sync_s: Arc<(AtomicBool, Mutex<Option<C>>, Condvar)>,
+}
+
+impl<C, T> Clone for TaskHandle<C, T> {
+    fn clone(&self) -> Self {
+        let _self = self;
+        Self {
+            _id: _self._id,
+            states: Arc::clone(&_self.states),
+            rt_states: Arc::clone(&_self.rt_states),
+            sync_s: Arc::clone(&_self.sync_s),
+        }
+    }
 }
 
 impl<C, T> TaskHandle<C, T>
@@ -384,7 +436,6 @@ impl<C: Clone + Send + 'static, T> Futurize<C, T> {
 }
 
 /// Futurized task.
-#[derive(Clone)]
 pub struct Futurized<C, T> {
     _id: usize,
     states: Arc<(
@@ -395,6 +446,18 @@ pub struct Futurized<C, T> {
     )>,
     receiver: Arc<(AtomicBool, Mutex<Option<C>>, Condvar)>,
     rt_states: Arc<(AtomicBool, AtomicBool, AtomicBool, AtomicBool)>,
+}
+
+impl<C, T> Clone for Futurized<C, T> {
+    fn clone(&self) -> Self {
+        let _self = self;
+        Self {
+            _id: _self._id,
+            states: Arc::clone(&_self.states),
+            receiver: Arc::clone(&_self.receiver),
+            rt_states: Arc::clone(&_self.rt_states),
+        }
+    }
 }
 
 impl<C, T> Futurized<C, T>
@@ -642,12 +705,19 @@ where
 ///    Ok(())
 ///}
 ///```
-#[derive(Clone)]
 pub struct SyncState<T> {
     item: Arc<(Mutex<Option<T>>, AtomicBool)>,
 }
 
-impl<T: Clone + Send + Sync + ?Sized> SyncState<T> {
+impl<T> Clone for SyncState<T> {
+    fn clone(&self) -> Self {
+        Self {
+            item: Arc::clone(&self.item),
+        }
+    }
+}
+
+impl<T: Clone + Send + ?Sized> SyncState<T> {
     /// Create new state.
     pub fn new(t: T) -> SyncState<T> {
         SyncState {
