@@ -6,7 +6,7 @@ edition = "2018"
 description = "Asynchronize blocking operation."
 documentation = "https://docs.rs/asynchron"
 readme = "README.md"
-keywords = ["async", "sync", "std", "multi-thread"]
+keywords = ["async", "sync", "std", "multi-thread", "non-blocking"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ar37-rs/asynchron"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
