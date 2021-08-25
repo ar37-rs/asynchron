@@ -1,5 +1,5 @@
 use asynchron::{Futurize, ITaskHandle, Progress, SyncState};
-use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*};
+use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*, *};
 use reqwest::Client;
 use std::{io::Result, time::Duration};
 use tokio::runtime::Builder;
