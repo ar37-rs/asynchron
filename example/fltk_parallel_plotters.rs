@@ -1,3 +1,5 @@
+// main source code taken from: https://github.com/fltk-rs/demos/tree/master/plotters
+// Cargo.toml deps:
 // [dependencies]
 // fltk = "1"
 // plotters = "0.3"
