@@ -114,7 +114,6 @@ fn main() -> Result<()> {
     let mut timer = 0;
 
     while app.wait() {
-        std::thread::sleep(Duration::from_millis(10));
         reqwest.try_resolve(|progress, done| {
             match progress {
                 Progress::Current(task_receiver) => {
@@ -150,7 +149,9 @@ fn main() -> Result<()> {
         timer += 1;
 
         timer_frame.set_label(timer.to_string().as_ref());
-        wind.redraw()
+        wind.redraw();
+        app::sleep(0.011);
+        app::awake();
     }
     Ok(())
 }
