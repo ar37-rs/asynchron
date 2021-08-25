@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let plot2 = Futurize::task(0, move |_task| -> Progress<Vec<u8>, ()> {
+    let plot2 = Futurize::task(1, move |_task| -> Progress<Vec<u8>, ()> {
         let mut buf = vec![0u8; W * H * 3];
         let root =
             BitMapBackend::<RGBPixel>::with_buffer_and_format(&mut buf, (W as u32, H as u32))
