@@ -248,9 +248,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            Progress::Error(_) => {
-                // unwrapping all over the place potentially panicked, retry?
-                plot1.try_do();
+            Progress::Error(e) => {
+                println!("{}\n", e)
             }
             _ => (),
         });
@@ -263,9 +262,8 @@ fn main() -> Result<(), Box<dyn Error>> {
                         draw::draw_rgb(&mut frame2, &_buf).unwrap();
                     }
                 }
-                Progress::Error(_) => {
-                    // unwrapping all over the place potentially panicked, retry?
-                    plot2.try_do();
+                Progress::Error(e) => {
+                   println!("{}\n", e)
                 }
                 _ => (),
             });
