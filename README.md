@@ -40,7 +40,7 @@ fn main() {
                 }
             }
 
-            if _task.is_canceled() {
+            if _task.should_cancel() {
                 _task.send("Canceling the task".into());
                 return Progress::Canceled;
             }

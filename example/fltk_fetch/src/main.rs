@@ -75,7 +75,7 @@ fn main() -> Result<()> {
                 let status = response.status().to_string();
                 for _ in 0..5 {
                     // check if the task is canceled.
-                    if _task.is_canceled() {
+                    if _task.should_cancel() {
                         return Progress::Canceled;
                     }
                     _task.send(status.clone());
@@ -85,7 +85,7 @@ fn main() -> Result<()> {
                 match response.text().await {
                     Ok(text) => {
                         // and check here also.
-                        if _task.is_canceled() {
+                        if _task.should_cancel() {
                             return Progress::Canceled;
                         }
                         Progress::Completed(text[0..100].to_string())

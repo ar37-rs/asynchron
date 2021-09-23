@@ -153,37 +153,17 @@ impl<C: Clone + Send + 'static> ITaskHandle<C> {
         self._id
     }
 
-    /// Suspend the task (it's quite rare that suspending task from inside itself, unless in a particular case).
-    pub fn suspend(&self) {
-        self.rt_states.3.store(TRU, Ordering::Relaxed)
-    }
-
-    /// Resume the task (it's quite rare that resuming task from inside itself, unless in a particular case).
-    pub fn resume(&self) {
-        self.rt_states.3.store(FAL, Ordering::Relaxed)
-    }
-
     /// Check if progress of the task should be suspended,
     ///
     /// usually applied for a specific task with event loop in it.
     ///
     /// do other things (switch) while the task is suspended.
-    pub fn is_suspended(&self) -> bool {
+    pub fn should_suspend(&self) -> bool {
         self.rt_states.3.load(Ordering::Relaxed)
     }
 
-    /// Check if progress of the task is resumed.
-    pub fn is_resumed(&self) -> bool {
-        !self.rt_states.3.load(Ordering::Relaxed)
-    }
-
-    /// Cancel the task (it's quite rare that canceling task from inside itself, unless in a particular case).
-    pub fn cancel(&self) {
-        self.rt_states.2.store(TRU, Ordering::Relaxed)
-    }
-
     /// Check if progress of the task should be canceled.
-    pub fn is_canceled(&self) -> bool {
+    pub fn should_cancel(&self) -> bool {
         self.rt_states.2.load(Ordering::Relaxed)
     }
 }
@@ -361,7 +341,7 @@ where
 ///                }
 ///            }
 ///
-///            if _task.is_canceled() {
+///            if _task.should_cancel() {
 ///                _task.send("Canceling the task".into());
 ///                return Progress::Canceled;
 ///            }
@@ -582,16 +562,16 @@ where
     /// WARNING! to prevent from data races this fn should be called once at a time.
     pub fn try_resolve<F: FnOnce(Progress<C, T>, bool) -> ()>(&self, f: F) {
         if self.rt_states.0.load(Ordering::Relaxed) {
-            let _awaiting = &self.rt_states.0;
-            let result = || {
+            let mut done = false;
+            let mut result = || {
                 let _self = self;
                 let (awaiting, task_panicked, _, suspended) = &*_self.rt_states;
                 {
                     if task_panicked.load(Ordering::Relaxed) {
                         suspended.store(FAL, Ordering::Relaxed);
                         task_panicked.store(FAL, Ordering::Relaxed);
-                        awaiting.store(FAL, Ordering::Relaxed);
                         // fixes unsound problem, return error immediately if the task is panicked.
+                        done = true;
                         return Progress::Error(Cow::Owned(format!(
                             "the task with id: {} panicked!",
                             _self._id
@@ -627,14 +607,17 @@ where
                         let result = Clone::clone(&*mtx);
                         *mtx = Progress::Current(None);
                         ready.store(FAL, Ordering::Relaxed);
-                        awaiting.store(FAL, Ordering::Relaxed);
+                        done = true;
                         return result;
                     }
                     return Progress::Current(None);
                 }
                 Progress::Current(None)
             };
-            f(result(), !_awaiting.load(Ordering::Relaxed))
+            f(result(), done);
+            if done {
+                self.rt_states.0.store(FAL, Ordering::Relaxed);
+            }
         }
     }
 

@@ -34,7 +34,7 @@ fn main() {
                     }
                 }
 
-                if _task.is_canceled() {
+                if _task.should_cancel() {
                     let value = format!("Canceling the task with id: {}", _task.id());
                     _task.send(value);
                     return Progress::Canceled;
