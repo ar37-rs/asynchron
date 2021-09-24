@@ -232,6 +232,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut count = 0;
     let mut assume_failure = false;
 
+    let mut retry_plot2 = false;
+    let mut retry_plot1 = false;
+
     while app.wait() {
         plot1.try_resolve(|prog, _| match prog {
             Progress::Current(recv) => {
@@ -242,14 +245,21 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            Progress::Error(_) => {
+            Progress::Error(e) => {
+                println!("{}\n", e);
                 // unwrapping all over the place potentially panicked, retry?
-                plot1.try_do();
+                retry_plot1 = true
             }
             _ => (),
         });
 
-        if count > 60 {
+        if retry_plot1 {
+            plot1.try_do();
+            retry_plot1 = false
+        }
+
+        if count >= 60 {
+            count = 60;
             assume_failure = true;
             plot2.try_resolve(|prog, _| match prog {
                 Progress::Current(recv) => {
@@ -257,12 +267,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                         draw::draw_rgb(&mut frame2, &_buf).unwrap();
                     }
                 }
-                Progress::Error(_) => {
+                Progress::Error(e) => {
+                    println!("{}\n", e);
                     // unwrapping all over the place potentially panicked, retry?
-                    plot2.try_do();
+                    retry_plot2 = true
                 }
                 _ => (),
             });
+
+            if retry_plot2 {
+                plot2.try_do();
+                retry_plot2 = false
+            }
         }
         win.redraw();
         app::sleep(0.017);
