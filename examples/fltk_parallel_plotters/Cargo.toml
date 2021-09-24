@@ -1,6 +1,6 @@
 [package]
 name = "fltk_parallel_plotters"
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Ar37-rs <adyaro37@gmail.com>"]
 edition = "2018"
 publish = false
