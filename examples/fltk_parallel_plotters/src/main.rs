@@ -1,10 +1,4 @@
 // main source code taken from: https://github.com/fltk-rs/demos/tree/master/plotters
-// Cargo.toml deps:
-// [dependencies]
-// fltk = "1"
-// plotters = "0.3"
-// plotters-bitmap = "0.3"
-// asynchron = "0.8"
 
 use asynchron::{Futurize, Progress};
 use fltk::{prelude::*, *};
@@ -248,8 +242,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
             }
-            Progress::Error(e) => {
-                println!("{}\n", e)
+            Progress::Error(_) => {
+                // unwrapping all over the place potentially panicked, retry?
+                plot1.try_do();
             }
             _ => (),
         });
@@ -262,8 +257,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                         draw::draw_rgb(&mut frame2, &_buf).unwrap();
                     }
                 }
-                Progress::Error(e) => {
-                   println!("{}\n", e)
+                Progress::Error(_) => {
+                    // unwrapping all over the place potentially panicked, retry?
+                    plot2.try_do();
                 }
                 _ => (),
             });

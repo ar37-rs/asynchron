@@ -86,6 +86,6 @@ fn main() {
 }
 ```
 
-## More Example
+## More Examples
 
-Mixing sync and async with tokio, reqwest and fltk-rs can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/example).
+Unblock blocking ureq or reqwest with fltk-rs can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/examples).
