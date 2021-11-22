@@ -88,4 +88,4 @@ fn main() {
 
 ## More Examples
 
-Unblock blocking ureq or reqwest with fltk-rs can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/examples) and [here also](https://github.com/Ar37-rs/fe-image-widget/tree/main/examples/netimage_widget).
+Unblock blocking ureq or reqwest with fltk-rs can be found [here](https://github.com/Ar37-rs/asynchron/tree/main/examples).
