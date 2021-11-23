@@ -1,13 +1,15 @@
 use asynchron::{Futurize, ITaskHandle, Progress, SyncState};
-use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*, *};
-use std::{io::Result, time::Duration};
+use fltk::{*, app::*, button::*, frame::*, prelude::{GroupExt, WidgetExt}, window::*};
+use std::time::Duration;
 use ureq::{Agent, AgentBuilder};
 
-fn main() -> Result<()> {
+fn main() {
     let mut app = App::default();
     app.set_scheme(Scheme::Gtk);
     let mut wind = Window::default().with_size(400, 300);
+    wind.make_resizable(true);
     wind.set_label("Hello from rust");
+
     let mut timer_frame = Frame::default().with_label("");
     timer_frame.set_pos(0, 0);
     timer_frame.set_size(400, 100);
@@ -20,6 +22,7 @@ fn main() -> Result<()> {
     let mut button_fetch = Button::default().with_label("Fetch");
     button_fetch.set_pos(120, 210);
     button_fetch.set_size(80, 40);
+    
     let mut button_cancel = Button::default()
         .with_label("Cancel")
         .right_of(&button_fetch, 10);
@@ -30,7 +33,7 @@ fn main() -> Result<()> {
     let url = SyncState::new("https://www.rust-lang.org");
     let _url = url.clone();
 
-    let request = Futurize::task(0, move |_task: ITaskHandle<u16>| -> Progress<u16, String> {
+    let request = Futurize::task(0, move |this: ITaskHandle<u16>| -> Progress<u16, String> {
         let url = match _url.load() {
             Some(url) => url,
             _ => return Progress::Error("Unable to load URL, probably empty.".into()),
@@ -41,37 +44,35 @@ fn main() -> Result<()> {
             .timeout_write(Duration::from_secs(3))
             .build();
 
-        let res = if let Ok(res) = agent.get(url).call() {
-            res
-        } else {
-            return Progress::Error(
-                format!("Network problem, unable to request url: {}", &url).into(),
-            );
+        let req = agent.get(url);
+        let res = match req.call() {
+            Ok(res) => res,
+            Err(e) => return Progress::Error(e.to_string().into()),
         };
 
         // Check if progress is canceled
-        if _task.should_cancel() {
+        if this.should_cancel() {
             return Progress::Canceled;
         }
 
         for _ in 0..5 {
             // Check if the task is canceled.
-            if _task.should_cancel() {
+            if this.should_cancel() {
                 return Progress::Canceled;
             }
-            _task.send(res.status());
+            this.send(res.status());
             std::thread::sleep(Duration::from_millis(100))
         }
-		
+
         if res.status() == 200 {
             // And check here also.
-            if _task.should_cancel() {
+            if this.should_cancel() {
                 Progress::Canceled
             } else {
                 match res.into_string() {
                     Ok(text) => {
                         // and check here also.
-                        if _task.should_cancel() {
+                        if this.should_cancel() {
                             return Progress::Canceled;
                         }
                         Progress::Completed(text[0..100].to_string())
@@ -98,7 +99,6 @@ fn main() -> Result<()> {
     });
 
     let mut label = String::new();
-
     let mut timer = 0;
 
     while app.wait() {
@@ -141,5 +141,4 @@ fn main() -> Result<()> {
         app::sleep(0.011);
         app::awake();
     }
-    Ok(())
 }

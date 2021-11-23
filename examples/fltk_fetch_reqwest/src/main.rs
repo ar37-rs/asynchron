@@ -1,10 +1,16 @@
 use asynchron::{Futurize, ITaskHandle, Progress, SyncState};
 use fltk::{app::*, button::*, frame::*, prelude::WidgetExt, window::*, *};
-use reqwest::Client;
-use std::{io::Result, time::Duration};
+use reqwest::{Client, Response};
+use std::time::Duration;
 use tokio::runtime::Builder;
 
-fn main() -> Result<()> {
+async fn fetch(url: &str, time_out: Duration) -> reqwest::Result<Response> {
+    let client = Client::builder().timeout(time_out).build()?;
+    let req = client.get(url).build()?;
+    client.execute(req).await
+}
+
+fn main() -> std::io::Result<()> {
     let mut app = App::default();
     app.set_scheme(Scheme::Gtk);
     let mut wind = Window::default().with_size(400, 300);
@@ -31,40 +37,29 @@ fn main() -> Result<()> {
     let url = SyncState::new("https://www.rust-lang.org");
     let _url = url.clone();
 
+    let rt = Builder::new_multi_thread().enable_all().build()?;
+    // Clone the runtime handle, so the rt still reusable for the other tasks if needed.
+    let rt_handle = rt.handle().clone();
+
     let reqwest = Futurize::task(
         0,
-        move |_task: ITaskHandle<String>| -> Progress<String, String> {
-            // Builder::new_current_thread().enable_all().build() also working fine on this context.
-            let rt = match Builder::new_multi_thread().enable_all().build() {
-                Ok(rt) => rt,
-                Err(e) => return Progress::Error(e.to_string().into()),
-            };
-
-            rt.block_on(async {
-                // timeout connection for 10 seconds, so there's a noise if something goes wrong.
-                let time_out = Duration::from_secs(10);
-                let client = match Client::builder().timeout(time_out).build() {
-                    Ok(client) => client,
-                    Err(e) => return Progress::Error(e.to_string().into()),
-                };
-
+        move |this: ITaskHandle<String>| -> Progress<String, String> {
+            rt_handle.block_on(async {
                 let url = match _url.load() {
                     Some(url) => url,
-                   _ => return Progress::Error("Unable to load URL, probably empty.".into()),
+                    _ => return Progress::Error("Unable to load URL, probably empty.".into()),
                 };
 
-                let request = match client.get(url).build() {
-                    Ok(request) => request,
-                    Err(e) => return Progress::Error(e.to_string().into()),
-                };
+                // Timeout connection for 5 seconds, so there's a noise if something goes wrong.
+                let time_out = Duration::from_secs(5);
 
-                let response = match client.execute(request).await {
+                let response = match fetch(url, time_out).await {
                     Ok(response) => response,
                     Err(e) => return Progress::Error(e.to_string().into()),
                 };
 
                 for i in 0..5 {
-                    _task.send(format!("checking status... {}", i));
+                    this.send(format!("checking status... {}", i));
                     std::thread::sleep(Duration::from_millis(100))
                 }
 
@@ -75,17 +70,17 @@ fn main() -> Result<()> {
                 let status = response.status().to_string();
                 for _ in 0..5 {
                     // check if the task is canceled.
-                    if _task.should_cancel() {
+                    if this.should_cancel() {
                         return Progress::Canceled;
                     }
-                    _task.send(status.clone());
+                    this.send(status.clone());
                     std::thread::sleep(Duration::from_millis(100))
                 }
 
                 match response.text().await {
                     Ok(text) => {
                         // and check here also.
-                        if _task.should_cancel() {
+                        if this.should_cancel() {
                             return Progress::Canceled;
                         }
                         Progress::Completed(text[0..100].to_string())

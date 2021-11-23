@@ -22,7 +22,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let xphase: f64 = 0.0;
     let yphase: f64 = 0.1;
 
-    let plot1 = Futurize::task(0, move |_task| -> Progress<Vec<u8>, ()> {
+    let plot1 = Futurize::task(0, move |this| -> Progress<Vec<u8>, ()> {
         let mut buf = vec![0u8; W * H * 3];
         let root =
             BitMapBackend::<RGBPixel>::with_buffer_and_format(&mut buf, (W as u32, H as u32))
@@ -107,7 +107,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 last_flushed = epoch;
             }
 
-            _task.send(buf.to_owned());
+            this.send(buf.to_owned());
 
             while let Some((e, _, _)) = Some(data[0]) {
                 if ((e - epoch) * 20.0).exp() > 0.1 {
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    let plot2 = Futurize::task(1, move |_task| -> Progress<Vec<u8>, ()> {
+    let plot2 = Futurize::task(1, move |this| -> Progress<Vec<u8>, ()> {
         let mut buf = vec![0u8; W * H * 3];
         let root =
             BitMapBackend::<RGBPixel>::with_buffer_and_format(&mut buf, (W as u32, H as u32))
@@ -203,7 +203,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 last_flushed = epoch;
             }
 
-            _task.send(buf.to_owned());
+            this.send(buf.to_owned());
 
             while let Some((e, _, _)) = Some(data[0]) {
                 if ((e - epoch) * 20.0).exp() > 0.1 {

@@ -10,23 +10,23 @@ fn main() {
     for i in 0..5 {
         let task: Futurized<String, u32> = Futurize::task(
             i,
-            move |_task: ITaskHandle<String>| -> Progress<String, u32> {
+            move |this: ITaskHandle<String>| -> Progress<String, u32> {
                 // // Panic if need to.
                 // // will return Error with a message:
                 // // "the task with id: (specific task id) panicked!"
-                // if _task.id() == 3 {
+                // if this.id() == 3 {
                 //    std::panic::panic_any("loudness")
                 // }
-                let millis = _task.id() + 1;
+                let millis = this.id() + 1;
                 let sleep_dur = Duration::from_millis((10 * millis) as u64);
                 std::thread::sleep(sleep_dur);
                 let result = Ok::<String, Error>(
-                    format!("The task with id: {} wake up from sleep", _task.id()).into(),
+                    format!("The task with id: {} wake up from sleep", this.id()).into(),
                 );
                 match result {
                     Ok(value) => {
                         // Send current task progress.
-                        _task.send(value)
+                        this.send(value)
                     }
                     Err(e) => {
                         // Return error immediately if something not right, for example:
@@ -34,9 +34,9 @@ fn main() {
                     }
                 }
 
-                if _task.should_cancel() {
-                    let value = format!("Canceling the task with id: {}", _task.id());
-                    _task.send(value);
+                if this.should_cancel() {
+                    let value = format!("Canceling the task with id: {}", this.id());
+                    this.send(value);
                     return Progress::Canceled;
                 }
                 Progress::Completed(instant.elapsed().subsec_millis())
