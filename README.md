@@ -1,5 +1,6 @@
-# Asynchron
+This repository has been archived use [Flowync](https://github.com/Ar37-rs/flowync) instead.
 
+# Asynchron
 [![Crates.io](https://img.shields.io/crates/v/asynchron.svg)](https://crates.io/crates/asynchron)
 [![Asynchron documentation](https://docs.rs/asynchron/badge.svg)](https://docs.rs/asynchron)
 [![CI](https://github.com/Ar37-rs/asynchron/actions/workflows/ci.yml/badge.svg)](https://github.com/Ar37-rs/asynchron/actions/workflows/ci.yml)
